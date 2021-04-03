@@ -1,4 +1,4 @@
-use std::mem::MaybeUninit;
+use std::{mem::MaybeUninit};
 use std::ops::{Add, AddAssign};
 use std::ops::{Div, DivAssign};
 use std::ops::{Mul, MulAssign};
@@ -169,8 +169,7 @@ pub enum CurveType {
 
 const MCLBN_FP_UNIT_SIZE: usize = 6;
 const MCLBN_FR_UNIT_SIZE: usize = 4;
-const MCLBN_COMPILED_TIME_VAR: c_int =
-    (MCLBN_FR_UNIT_SIZE as c_int * 10 + MCLBN_FP_UNIT_SIZE as c_int);
+const MCLBN_COMPILED_TIME_VAR: c_int = MCLBN_FR_UNIT_SIZE as c_int * 10 + MCLBN_FP_UNIT_SIZE as c_int;
 
 macro_rules! common_impl {
     ($t:ty, $is_equal_fn:ident, $is_zero_fn:ident) => {
@@ -646,5 +645,71 @@ pub fn miller_loop(z: &mut GT, x: &G1, y: &G2) {
 pub fn final_exp(y: &mut GT, x: &GT) {
     unsafe {
         mclBn_finalExp(y, x);
+    }
+}
+
+
+// KZG 10
+
+#[derive(Debug, Clone)]
+pub struct Polynomial {
+    pub coefs: Vec<Fr>
+}
+
+impl Polynomial {
+    pub fn new(data: &Vec<i32>) -> Self {
+        Self {
+            coefs: data.into_iter().map(|x| Fr::from_int(*x)).collect(),
+        }
+    }
+}
+
+const G1_GEN_X: &str = "3685416753713387016781088315183077757961620795782546409894578378688607592378376318836054947676345821548104185464507";
+const G1_GEN_Y: &str = "1339506544944476473020471379941921221584933875938349620426543736416511423956333506472724655353366534992391756441569";
+const G2_GEN_X_D0: &str = "352701069587466618187139116011060144890029952792775240219908644239793785735715026873347600343865175952761926303160";
+const G2_GEN_X_D1: &str = "3059144344244213709971259814753781636986470325476647558659373206291635324768958432433509563104347017837885763365758";
+const G2_GEN_Y_D0: &str = "1985150602287291935568054521177171638300868978215655730859378665066344726373823718423869104263333984641494340347905";
+const G2_GEN_Y_D1: &str = "927553665492332455747201965776037880757740193453592970025027978793976877002675564980949289727957565575433344219582";
+
+#[derive(Debug, Clone)]
+pub struct Curve{
+    pub g1_gen: G1,
+    pub g2_gen: G2,
+    // pub g1_points: Vec<G1>,
+    // pub g2_points: Vec<G2>,
+    // pub order: u32
+}
+
+impl G1 {
+    pub fn gen() -> G1 {
+        let mut g1 = G1::default();
+        g1.x.set_str(G1_GEN_X, 10);
+        g1.y.set_str(G1_GEN_Y, 10);
+        g1.z.set_int(1);
+        return g1;
+    }
+}
+
+impl G2 {
+    pub fn gen() -> G2 {
+        let mut g2 = G2::default();
+        
+        g2.x.d[0].set_str(G2_GEN_X_D0, 10);
+        g2.x.d[1].set_str(G2_GEN_X_D1, 10);
+        g2.y.d[0].set_str(G2_GEN_Y_D0, 10);
+        g2.y.d[1].set_str(G2_GEN_Y_D1, 10);
+        g2.z.d[0].set_int(1);
+        g2.z.d[1].clear();
+
+        return g2;
+    }
+}
+
+impl Curve {
+    pub fn new() -> Self {
+        Self {
+            g1_gen: G1::gen(),
+            g2_gen: G2::gen()
+        }
     }
 }

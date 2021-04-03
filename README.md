@@ -20,3 +20,9 @@ http://opensource.org/licenses/BSD-3-Clause
 # Author
 
 光成滋生 MITSUNARI Shigeo(herumi@nifty.com)
+
+# Run tests:
+
+```
+cargo test -- --test-threads 1 --nocapture
+```

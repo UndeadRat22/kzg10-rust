@@ -3,7 +3,6 @@ use std::mem;
 
 macro_rules! field_test {
     ($t:ty) => {{
-        println!("Is this even called");
         let mut x = <$t>::zero();
         assert!(x.is_valid());
         assert!(x.is_zero());
@@ -131,7 +130,7 @@ macro_rules! serialize_test {
 
 #[test]
 #[allow(non_snake_case)]
-fn test() {
+fn mcl_test() {
     assert_eq!(mem::size_of::<Fr>(), 32);
     assert_eq!(mem::size_of::<Fp>(), 48);
     assert_eq!(mem::size_of::<Fp2>(), 48 * 2);
@@ -172,3 +171,31 @@ fn test() {
     serialize_test! {G2, Q};
     serialize_test! {GT, e};
 }
+
+
+#[test]
+fn polynomial_new_works_with_valid_params() {
+    assert!(init(CurveType::BLS12_381));
+    let coefficients = vec![1, 2, 3, 4, 7, 7, 7, 7, 13, 13, 13, 13, 13, 13, 13, 13];
+    let _poly = Polynomial::new(&coefficients);
+}
+
+#[test]
+fn curve_new_sets_g1_gen_to_correct_val() {
+    assert!(init(CurveType::BLS12_381));
+    let curve = Curve::new();
+
+    let result = curve.g1_gen.get_str(10);
+    assert_eq!("1 3685416753713387016781088315183077757961620795782546409894578378688607592378376318836054947676345821548104185464507 1339506544944476473020471379941921221584933875938349620426543736416511423956333506472724655353366534992391756441569", result);
+}
+
+#[test]
+fn curve_new_sets_g2_gen_to_correct_val() {
+    assert!(init(CurveType::BLS12_381));
+    let curve = Curve::new();
+
+    let result = curve.g2_gen.get_str(10);
+    
+    assert_eq!("1 352701069587466618187139116011060144890029952792775240219908644239793785735715026873347600343865175952761926303160 3059144344244213709971259814753781636986470325476647558659373206291635324768958432433509563104347017837885763365758 1985150602287291935568054521177171638300868978215655730859378665066344726373823718423869104263333984641494340347905 927553665492332455747201965776037880757740193453592970025027978793976877002675564980949289727957565575433344219582", result);
+}
+
