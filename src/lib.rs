@@ -1,4 +1,4 @@
-use std::{mem::MaybeUninit, ops};
+use std::{cmp::min, mem::MaybeUninit, ops};
 use std::ops::{Add, AddAssign};
 use std::ops::{Div, DivAssign};
 use std::ops::{Mul, MulAssign};
@@ -107,6 +107,7 @@ extern "C" {
     fn mclBnG1_getStr(buf: *mut u8, maxBufSize: usize, x: *const G1, ioMode: i32) -> usize;
     fn mclBnG1_serialize(buf: *mut u8, maxBufSize: usize, x: *const G1) -> usize;
     fn mclBnG1_deserialize(x: *mut G1, buf: *const u8, bufSize: usize) -> usize;
+    fn mclBnG1_mulVec(x: *mut G1, vec1: *const G1, vec2: *const Fr, bufSize: usize);
 
     fn mclBnG1_add(z: *mut G1, x: *const G1, y: *const G1);
     fn mclBnG1_sub(z: *mut G1, x: *const G1, y: *const G1);
@@ -687,6 +688,13 @@ impl Fr {
     pub fn one() -> Fr {
         let mut fr = Fr::default();
         fr.set_int(1);
+        
+        return fr;
+    }
+    pub fn get_neg(&self) -> Fr {
+        let mut fr = Fr::default();
+        Fr::neg(&mut fr, self);
+
         return fr;
     }
 }
@@ -701,17 +709,29 @@ impl ops::Mul<Fr> for Fr {
     }
 }
 
+impl ops::Div<Fr> for Fr {
+    type Output = Fr;
+    fn div(self, rhs: Fr) -> Self::Output {
+        let mut result = Fr::default();
+        Fr::div(&mut result, &self, &rhs);
+
+        return result;
+    }
+}
+
+impl ops::Sub<Fr> for Fr {
+    type Output = Fr;
+    fn sub(self, rhs: Fr) -> Self::Output {
+        let mut result = Fr::default();
+        Fr::sub(&mut result, &self, &rhs);
+
+        return result;
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Polynomial {
     pub coefs: Vec<Fr>
-}
-
-impl Polynomial {
-    pub fn new(data: &Vec<i32>) -> Self {
-        Self {
-            coefs: data.iter().map(|x| Fr::from_int(*x)).collect(),
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -721,6 +741,50 @@ pub struct Curve{
     pub g1_points: Vec<G1>,
     pub g2_points: Vec<G2>,
     pub order: usize
+}
+
+impl Polynomial {
+    pub fn new(data: &Vec<i32>) -> Self {
+        Self {
+            coefs: data.iter().map(|x| Fr::from_int(*x)).collect(),
+        }
+    }
+
+    pub fn order(&self) -> usize {
+        self.coefs.len()
+    }
+
+    pub fn gen_proof_at(&self, g1_points:Vec<G1>, point: Fr) -> G1 {
+        let divisor = vec![point.get_neg(), Fr::one()];
+        let quotient_poly = self.long_division(divisor);
+
+        let mut result = G1::default();
+        unsafe {
+            mclBnG1_mulVec(&mut result, g1_points.as_ptr(), quotient_poly.coefs.as_ptr(), min(g1_points.len(), quotient_poly.order()))
+        };
+        return result;
+    }
+
+    pub fn long_division(&self, divisor: Vec<Fr>) -> Polynomial {
+        let mut poly_copy = self.clone();
+        let mut copy_pos = poly_copy.order() - 1;
+
+        let mut result = vec![Fr::default(); poly_copy.order() - divisor.len() + 1];
+        
+        for r_i in (0 .. result.len()).rev() {
+            result[r_i] = &poly_copy.coefs[copy_pos] / &divisor.last().unwrap();
+
+            for d_i in (0 .. divisor.len()).rev() {
+                poly_copy.coefs[r_i + d_i] -= &(&result[r_i] * &divisor[d_i]);
+            }
+
+            copy_pos -= 1;
+        }
+
+        return Polynomial {
+            coefs: result
+        };
+    }
 }
 
 impl Curve {

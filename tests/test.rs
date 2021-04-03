@@ -266,6 +266,24 @@ fn curve_new_g1_points_should_have_exact_values_given_specific_params() {
     assert!(all_values_equal);
 }
 
+#[test]
+fn polynomial_generate_proof_at_should_have_a_specific_value_given_exact_inputs() {
+    // Arrange
+    assert!(init(CurveType::BLS12_381));
+    let coefficients = vec![1, 2, 3, 4, 7, 7, 7, 7, 13, 13, 13, 13, 13, 13, 13, 13];
+    let poly = Polynomial::new(&coefficients);
+    let secret = Fr::from_str("1927409816240961209460912649124", 10);
+    let curve = Curve::new(secret.unwrap(), poly.order());
+    
+    let point = Fr::from_int(17);
+    // Act
+    let proof = poly.gen_proof_at(curve.g1_points, point);
+    // Assert
+    let expected = "1 867803339007397142967426903694725732786398875082812714585913536387867789215930966591756718433944432919654354450045 1056604647851765547809696011101405958529416282518275445556537937608095695960215709670255078026676619389223749112525";
+    let actual = proof.get_str(10);
+    assert_eq!(expected, actual);
+}
+
     // Arrange
     
     // Act
