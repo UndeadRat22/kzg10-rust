@@ -354,3 +354,51 @@ fn proof_loop_works_with_random_points() {
         // Assert
         assert!(is_valid);
 }
+
+// FFT | FK20
+
+#[test]
+fn fftsettings_new_creates_valid_settings() {
+    // Arrange
+    
+    // Act
+    let _fft_settings = FFTSettings::new(5);
+
+    // Assert
+    // println!("root_z");
+    // for x in fft_settings.root_z {
+    //     println!("{}", x.get_str(10));
+    // }
+
+    // println!("root_z_rev");
+    // for x in fft_settings.root_z_rev {
+    //     println!("{}", x.get_str(10));
+    // }
+}
+
+#[test]
+fn __debug_rust_learning_tests() {
+    let mut vec = vec![1, 2, 3, 4];
+
+    rec_fn(&mut vec);
+
+    fn rec_fn(values: &mut [i32]) {
+        println!("{:?}", values);
+        if values.len() == 1 {
+            return;
+        }
+        let half_size = values.len() >> 1;
+
+        let mut next = &mut values[0..half_size];
+        
+        rec_fn(&mut next);
+
+        for i in 0 .. values.len() {
+            values[i] = values[i] * 2;
+        }
+    }
+
+    println!("{:?}", vec);
+}
+
+
