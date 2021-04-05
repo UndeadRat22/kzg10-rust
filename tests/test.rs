@@ -430,20 +430,3 @@ fn fk20matrix_new_builds_valid_settings() {
         }
     }
 }
-
-#[test]
-fn g1_zero_is_1_1_0() {
-    // Arrange
-    assert!(init(CurveType::BLS12_381));
-    let g1 = G1::x1_y1_z0();
-
-    // Act
-    let x = g1.x.get_str(10);
-    let y = g1.y.get_str(10);
-    let z = g1.z.get_str(10);
-    // Assert
-
-    assert_eq!(x, "1");
-    assert_eq!(y, "1");
-    assert_eq!(z, "0");
-}

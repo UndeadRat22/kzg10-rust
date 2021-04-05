@@ -669,16 +669,6 @@ impl G1 {
         return g1;
     }
 
-    // substitute for G1::zero()
-    pub fn x1_y1_z0() -> G1 {
-        let mut g1 = G1::default();
-        g1.x.set_int(1);
-        g1.y.set_int(1);
-        g1.z.set_int(0);
-
-        return g1;
-    }
-
     pub fn pair(&self, rhs: &G2) -> GT {
         let mut gt = GT::default();
 
@@ -1066,7 +1056,7 @@ impl FK20Matrix {
             i += 1;
         }
         
-        x[k - 1] = G1::x1_y1_z0();
+        x[k - 1] = G1::zero();
 
         return FK20Matrix::toeplitz_part_1(&fft_settings, &x);
     }
@@ -1075,7 +1065,7 @@ impl FK20Matrix {
         let n = x.len();
 
         // extend x with zeroes
-        let tail= vec![G1::x1_y1_z0(); n];
+        let tail= vec![G1::zero(); n];
         let x_ext: Vec<G1> = x.iter()
             .map(|g1| g1.clone())
             .chain(tail)
@@ -1103,7 +1093,7 @@ impl FK20Matrix {
 
         let stride = fft_settings.max_width /  values.len();
 
-        let mut out = vec![G1::x1_y1_z0(); values.len()];
+        let mut out = vec![G1::zero(); values.len()];
 
         FK20Matrix::_fft_g1(&fft_settings, &vals_copy, 0, 1, &root_z, stride, &mut out);
 
