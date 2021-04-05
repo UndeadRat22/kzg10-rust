@@ -362,43 +362,47 @@ fn fftsettings_new_creates_valid_settings() {
     // Arrange
     
     // Act
-    let _fft_settings = FFTSettings::new(5);
-
+    let fft_settings = FFTSettings::new(4 + 5 + 1);
+    
     // Assert
-    // println!("root_z");
-    // for x in fft_settings.root_z {
-    //     println!("{}", x.get_str(10));
-    // }
+    let expected = vec![
+        Fr::from_int(1),
+        Fr::from_str("21328829733576761151404230261968752855781179864716879432436835449516750606329", 10).unwrap(),
+        Fr::from_str("12531186154666751577774347439625638674013361494693625348921624593362229945844", 10).unwrap(),
+        Fr::from_str("36815421669481109810171413925233110915304823983913164224028689762034127238951", 10).unwrap()
+    ];
 
-    // println!("root_z_rev");
-    // for x in fft_settings.root_z_rev {
-    //     println!("{}", x.get_str(10));
-    // }
+    // has lots more members, but checking the first few should point out whether the math is correct
+    let starting_equal =fft_settings.exp_roots_of_unity.iter()
+        .zip(expected)
+        .all(|(a, b)| a.get_str(10) == b.get_str(10));
+
+    assert!(starting_equal);
 }
 
-#[test]
-fn __debug_rust_learning_tests() {
-    let mut vec = vec![1, 2, 3, 4];
+// #[test]
+// fn __debug_rust_learning_tests() {
+//     let mut vec = vec![1, 2, 3, 4];
 
-    rec_fn(&mut vec);
+//     rec_fn(&mut vec);
 
-    fn rec_fn(values: &mut [i32]) {
-        println!("{:?}", values);
-        if values.len() == 1 {
-            return;
-        }
-        let half_size = values.len() >> 1;
+//     fn rec_fn(values: &mut [i32]) {
+//         println!("{:?}", values);
+//         if values.len() == 1 {
+//             return;
+//         }
+//         let half_size = values.len() >> 1;
 
-        let mut next = &mut values[0..half_size];
+//         let mut next = &mut values[0..half_size];
         
-        rec_fn(&mut next);
+//         rec_fn(&mut next);
 
-        for i in 0 .. values.len() {
-            values[i] = values[i] * 2;
-        }
-    }
+//         for i in 0 .. values.len() {
+//             values[i] = values[i] * 2;
+//         }
+//     }
 
-    println!("{:?}", vec);
-}
+//     println!("{:?}", vec);
+// }
 
 
