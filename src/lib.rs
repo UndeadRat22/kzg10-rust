@@ -669,6 +669,16 @@ impl G1 {
         return g1;
     }
 
+    // substitute for G1::zero()
+    pub fn x1_y1_z0() -> G1 {
+        let mut g1 = G1::default();
+        g1.x.set_int(1);
+        g1.y.set_int(1);
+        g1.z.set_int(0);
+
+        return g1;
+    }
+
     pub fn pair(&self, rhs: &G2) -> GT {
         let mut gt = GT::default();
 
@@ -1011,50 +1021,69 @@ impl FFTSettings {
 }
 
 // KZG Settings + FK20 Settings + FFTSettings?
-pub struct FK20Curve {
+pub struct FK20Matrix {
     pub curve: Curve,
     pub x_ext_fft_files: Vec<Vec<G1>>,
+    pub fft_settings: FFTSettings
 }
 
-impl FK20Curve {
+impl FK20Matrix {
     
-    pub fn new(curve: Curve, n2: usize, chunk_len: usize) -> FK20Curve {
-        // TODO: panic checks
+    pub fn new(curve: Curve, n2: usize, chunk_len: usize, fft_max_scale: u8) -> FK20Matrix {
         let n = n2 >> 1; // div by 2
         let k = n / chunk_len;
+        let fft_settings = FFTSettings::new(fft_max_scale);
+        if n2 > fft_settings.max_width {
+            panic!("extended size is larger than kzg settings supoort");
+        }
+        // TODO: more panic checks
+        
         let mut x_ext_fft_files: Vec<Vec<G1>> = vec![vec![]; chunk_len];
         for i in 0..chunk_len {
-            x_ext_fft_files[i] = FK20Curve::x_ext_fft_precompute(n, k, chunk_len,i);
+            x_ext_fft_files[i] = FK20Matrix::x_ext_fft_precompute(&fft_settings, &curve, n, k, chunk_len,i);
         }
 
-        FK20Curve {
+        FK20Matrix {
             curve,
-            x_ext_fft_files
+            x_ext_fft_files,
+            fft_settings
         }
     }
     
-    fn x_ext_fft_precompute(n: usize, k: usize, chunk_len: usize, offset: usize) -> Vec<G1> {
-        let _x: Vec<G1> = vec![G1::default(); k];
-        let _start = n - chunk_len - offset - 1;
-        for _i in 0..k {
+    fn x_ext_fft_precompute(fft_settings: &FFTSettings, curve: &Curve, n: usize, k: usize, chunk_len: usize, offset: usize) -> Vec<G1> {
+        let mut x: Vec<G1> = vec![G1::default(); k];
+        let start = n - chunk_len - offset - 1;
 
+        let mut i = 0;
+        let mut j = start + chunk_len;
+
+        while i + 1 < k {
+            // hack to remove overflow checking, 
+            // could just move this to the bottom and define j as start, but then need to check for overflows
+            // basically last j -= chunk_len overflows, but it's not used to access the array, as the i + 1 < k is false
+            j -= chunk_len;
+            x[i] = curve.g1_points[j].clone();
+            i += 1;
         }
+        
+        x[k - 1] = G1::x1_y1_z0();
 
-        return vec![];
+        return FK20Matrix::toeplitz_part_1(&fft_settings, &x);
     }
 
-    pub fn toeplitz_part_1(x: &Vec<G1>) -> Vec<G1> {
+    pub fn toeplitz_part_1(fft_settings: &FFTSettings, x: &Vec<G1>) -> Vec<G1> {
         let n = x.len();
 
-        // possible bug, check if G1::default() is equivalent to Zero, should be (x: 1, y: 1, z: 0)
         // extend x with zeroes
-        let tail= vec![G1::default(); n];
+        let tail= vec![G1::x1_y1_z0(); n];
         let x_ext: Vec<G1> = x.iter()
             .map(|g1| g1.clone())
             .chain(tail)
             .collect();
 
-        return x_ext;
+        let x_ext_fft = FK20Matrix::fft_g1(&fft_settings, &x_ext);
+        
+        return x_ext_fft;
     }
 
     // TODO: move, no inv version (fft_g1_inv)
@@ -1074,23 +1103,25 @@ impl FK20Curve {
 
         let stride = fft_settings.max_width /  values.len();
 
-        let mut out = vec![G1::default(); values.len()];
-        FK20Curve::_fft_g1(&fft_settings, &vals_copy, 0, 1, &root_z, stride, &mut out);
+        let mut out = vec![G1::x1_y1_z0(); values.len()];
+
+        FK20Matrix::_fft_g1(&fft_settings, &vals_copy, 0, 1, &root_z, stride, &mut out);
 
         return out;
     }
 
     fn _fft_g1(fft_settings: &FFTSettings, values: &Vec<G1>, value_offset: usize, value_stride: usize, roots_of_unity: &Vec<Fr>, roots_stride: usize, out: &mut [G1]) {
-        if values.len() < 4 {
-            FK20Curve::_fft_g1_simple(values, value_offset, value_stride, roots_of_unity, roots_stride, out);
+        if out.len() <= 4 {
+            FK20Matrix::_fft_g1_simple(values, value_offset, value_stride, roots_of_unity, roots_stride, out);
+            return;
         }
 
-        let half = values.len() >> 1;
+        let half = out.len() >> 1;
 
         // left
-        FK20Curve::_fft_g1(fft_settings, values, value_offset, value_stride << 1, roots_of_unity, roots_stride << 1, &mut out[..half]);
+        FK20Matrix::_fft_g1(fft_settings, values, value_offset, value_stride << 1, roots_of_unity, roots_stride << 1, &mut out[..half]);
         // right
-        FK20Curve::_fft_g1(fft_settings, values, value_offset + value_stride, value_stride << 1, roots_of_unity, roots_stride, &mut out[half..]);
+        FK20Matrix::_fft_g1(fft_settings, values, value_offset + value_stride, value_stride << 1, roots_of_unity, roots_stride << 1, &mut out[half..]);
 
         for i in 0..half {
             let x = out[i].clone();
@@ -1120,4 +1151,10 @@ impl FK20Curve {
             out[i] = last;
         }
     }
+}
+
+// Misc
+
+pub fn is_power_of_2(n: usize) -> bool {
+    return n & (n - 1) == 0;
 }
