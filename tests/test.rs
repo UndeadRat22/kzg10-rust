@@ -181,7 +181,7 @@ fn polynomial_new_works_with_valid_params() {
     
     // Act
     // Assert
-    let _poly = Polynomial::new(&coefficients);
+    let _poly = Polynomial::from_i32(&coefficients);
 }
 
 const GEN_G1_STR: &str = "1 3685416753713387016781088315183077757961620795782546409894578378688607592378376318836054947676345821548104185464507 1339506544944476473020471379941921221584933875938349620426543736416511423956333506472724655353366534992391756441569";
@@ -271,7 +271,7 @@ fn polynomial_generate_proof_at_should_have_a_specific_value_given_exact_inputs(
     // Arrange
     assert!(init(CurveType::BLS12_381));
     let coefficients = vec![1, 2, 3, 4, 7, 7, 7, 7, 13, 13, 13, 13, 13, 13, 13, 13];
-    let poly = Polynomial::new(&coefficients);
+    let poly = Polynomial::from_i32(&coefficients);
     let secret = Fr::from_str("1927409816240961209460912649124", 10);
     let curve = Curve::new(&secret.unwrap(), poly.order());
     
@@ -289,7 +289,7 @@ fn polynomial_commit_should_have_specific_value_given_exact_inputs() {
     // Arrange
     assert!(init(CurveType::BLS12_381));
     let coefficients = vec![1, 2, 3, 4, 7, 7, 7, 7, 13, 13, 13, 13, 13, 13, 13, 13];
-    let poly = Polynomial::new(&coefficients);
+    let poly = Polynomial::from_i32(&coefficients);
     let secret = Fr::from_str("1927409816240961209460912649124", 10);
     let curve = Curve::new(&secret.unwrap(), poly.order());
     // Act
@@ -305,7 +305,7 @@ fn polynomial_eval_at_should_specific_value_given_exact_inputs() {
         // Arrange
         assert!(init(CurveType::BLS12_381));
         let coefficients = vec![1, 2, 3, 4, 7, 7, 7, 7, 13, 13, 13, 13, 13, 13, 13, 13];
-        let poly = Polynomial::new(&coefficients);
+        let poly = Polynomial::from_i32(&coefficients);
         // Act
         let value = poly.eval_at(&Fr::from_int(17));
         // Assert
@@ -319,7 +319,7 @@ fn curve_is_proof_valid_should_return_true_when_same_parameters_used_for_gen_are
     // Arrange
     assert!(init(CurveType::BLS12_381));
     let coefficients = vec![1, 2, 3, 4, 7, 7, 7, 7, 13, 13, 13, 13, 13, 13, 13, 13];
-    let poly = Polynomial::new(&coefficients);
+    let poly = Polynomial::from_i32(&coefficients);
     let secret = Fr::from_str("1927409816240961209460912649124", 10);
     let curve = Curve::new(&secret.unwrap(), poly.order());
     let x = Fr::from_int(17);
@@ -339,7 +339,7 @@ fn proof_loop_works_with_random_points() {
         // Arrange
         assert!(init(CurveType::BLS12_381));
         let coefficients = vec![1, 2, 3, 4, 7, 7, 7, 7, 13, 13, 13, 13, 13, 13, 13, 13];
-        let poly = Polynomial::new(&coefficients);
+        let poly = Polynomial::from_i32(&coefficients);
         let secret = Fr::from_str("1927409816240961209460912649124", 10);
         let curve = Curve::new(&secret.unwrap(), poly.order());
         let mut x = Fr::default();
@@ -429,4 +429,40 @@ fn fk20matrix_new_builds_valid_settings() {
             assert_eq!(expected[i][j], str);
         }
     }
+}
+
+#[test]
+fn foo() {
+    // Arrange
+    assert!(init(CurveType::BLS12_381));
+    let chunk_len: usize = 16;
+    let chunk_count: usize = 32;
+    let n = chunk_len * chunk_count;
+    let secret = Fr::from_str("1927409816240961209460912649124", 10).unwrap();
+    let kzg_curve = Curve::new(&secret, n * 2);
+    let matrix = FK20Matrix::new(kzg_curve, n * 2, chunk_len, 10);
+    let polynomial = build_protolambda_poly(chunk_count, chunk_len, n);
+    let commitment = polynomial.commit(&matrix.curve.g1_points);
+    // Act
+
+    // Assert
+}
+
+// Helpers
+// Based on poly seen in TestKZGSettings_DAUsingFK20Multi
+fn build_protolambda_poly(chunk_count: usize, chunk_len: usize, n: usize) -> Polynomial {
+    let mut poly_vals = vec![Fr::default(); n];
+    let v134 = Fr::from_int(134);
+    for i in 0..chunk_count {
+        let base: Vec<i32> = vec![1, 2, 3, 4 + i as i32, 7, 8 + (i*i) as i32, 9, 10, 13, 14, 1, 15, 0, 1000, 0, 33];
+        for j in 0..base.len() {
+            poly_vals[i * chunk_len + j] = Fr::from_int(base[j]);
+        }
+        poly_vals[i * chunk_len + 12] = &Fr::zero() - &Fr::one();
+        poly_vals[i * chunk_len + 14] = &Fr::zero() - &v134;
+    }
+
+    let poly = Polynomial::from_fr(poly_vals);
+
+    return poly;
 }

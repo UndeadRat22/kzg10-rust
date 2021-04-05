@@ -821,7 +821,14 @@ pub struct Curve {
 }
 
 impl Polynomial {
-    pub fn new(data: &Vec<i32>) -> Self {
+
+    pub fn from_fr(data: Vec<Fr>) -> Self {
+        Self {
+            coefs: data
+        }
+    }
+    
+    pub fn from_i32(data: &Vec<i32>) -> Self {
         Self {
             coefs: data.iter().map(|x| Fr::from_int(*x)).collect(),
         }
@@ -931,7 +938,7 @@ pub unsafe fn init_globals() {
     // MODULUS = 52435875175126190479447740508185965837690552500527637822603658699938581184513
 	// PRIMITIVE_ROOT = 5
 	// [pow(PRIMITIVE_ROOT, (MODULUS - 1) // (2**i), MODULUS) for i in range(32)]
-    // TODO: gen dynamically? 
+    // TODO: gen dynamically?
     SCALE_2_ROOT_OF_UNITY = vec![
 		/* k=0          r=1          */ Fr::from_str("1", 10),
 		/* k=1          r=2          */ Fr::from_str("52435875175126190479447740508185965837690552500527637822603658699938581184512", 10),
@@ -1024,7 +1031,7 @@ impl FK20Matrix {
         let k = n / chunk_len;
         let fft_settings = FFTSettings::new(fft_max_scale);
         if n2 > fft_settings.max_width {
-            panic!("extended size is larger than kzg settings supoort");
+            panic!("extended size is larger than fft settings supoort");
         }
         // TODO: more panic checks
         
@@ -1101,6 +1108,7 @@ impl FK20Matrix {
     }
 
     fn _fft_g1(fft_settings: &FFTSettings, values: &Vec<G1>, value_offset: usize, value_stride: usize, roots_of_unity: &Vec<Fr>, roots_stride: usize, out: &mut [G1]) {
+        //TODO: fine tune for opt, maybe resolve number dinamically based on expiriments
         if out.len() <= 4 {
             FK20Matrix::_fft_g1_simple(values, value_offset, value_stride, roots_of_unity, roots_stride, out);
             return;
