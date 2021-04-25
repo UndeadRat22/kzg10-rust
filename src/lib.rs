@@ -1,4 +1,4 @@
-use std::{cmp::min, mem::MaybeUninit, ops, usize};
+use std::{cmp::min, iter, mem::{MaybeUninit}, ops, usize};
 use std::ops::{Add, AddAssign};
 use std::ops::{Div, DivAssign};
 use std::ops::{Mul, MulAssign};
@@ -808,7 +808,7 @@ impl ops::Sub<Fr> for Fr {
 
 #[derive(Debug, Clone)]
 pub struct Polynomial {
-    pub coefs: Vec<Fr>
+    pub coeffs: Vec<Fr>
 }
 
 #[derive(Debug, Clone)]
@@ -824,24 +824,24 @@ impl Polynomial {
 
     pub fn from_fr(data: Vec<Fr>) -> Self {
         Self {
-            coefs: data
+            coeffs: data
         }
     }
     
     pub fn from_i32(data: &Vec<i32>) -> Self {
         Self {
-            coefs: data.iter().map(|x| Fr::from_int(*x)).collect(),
+            coeffs: data.iter().map(|x| Fr::from_int(*x)).collect(),
         }
     }
 
     pub fn order(&self) -> usize {
-        self.coefs.len()
+        self.coeffs.len()
     }
 
     pub fn eval_at(&self, point: &Fr) -> Fr {
         let mut result = Fr::default();
         unsafe { 
-            mclBn_FrEvaluatePolynomial(&mut result, self.coefs.as_ptr(), self.order(), point)
+            mclBn_FrEvaluatePolynomial(&mut result, self.coeffs.as_ptr(), self.order(), point)
         };
         return result;
     }
@@ -852,7 +852,7 @@ impl Polynomial {
 
         let mut result = G1::default();
         unsafe {
-            mclBnG1_mulVec(&mut result, g1_points.as_ptr(), quotient_poly.coefs.as_ptr(), min(g1_points.len(), quotient_poly.order()))
+            mclBnG1_mulVec(&mut result, g1_points.as_ptr(), quotient_poly.coeffs.as_ptr(), min(g1_points.len(), quotient_poly.order()))
         };
         return result;
     }
@@ -864,24 +864,24 @@ impl Polynomial {
         let mut result = vec![Fr::default(); poly_copy.order() - divisor.len() + 1];
         
         for r_i in (0 .. result.len()).rev() {
-            result[r_i] = &poly_copy.coefs[copy_pos] / &divisor.last().unwrap();
+            result[r_i] = &poly_copy.coeffs[copy_pos] / &divisor.last().unwrap();
 
             for d_i in (0 .. divisor.len()).rev() {
-                poly_copy.coefs[r_i + d_i] -= &(&result[r_i] * &divisor[d_i]);
+                poly_copy.coeffs[r_i + d_i] -= &(&result[r_i] * &divisor[d_i]);
             }
 
             copy_pos -= 1;
         }
 
         return Polynomial {
-            coefs: result
+            coeffs: result
         };
     }
 
     pub fn commit(& self, g1_points: &Vec<G1>) -> G1 {
         let mut result = G1::default();
         unsafe {
-            mclBnG1_mulVec(&mut result, g1_points.as_ptr(), self.coefs.as_ptr(), min(g1_points.len(), self.order()))
+            mclBnG1_mulVec(&mut result, g1_points.as_ptr(), self.coeffs.as_ptr(), min(g1_points.len(), self.order()))
         };
         return result;
     }
@@ -940,40 +940,40 @@ pub unsafe fn init_globals() {
 	// [pow(PRIMITIVE_ROOT, (MODULUS - 1) // (2**i), MODULUS) for i in range(32)]
     // TODO: gen dynamically?
     SCALE_2_ROOT_OF_UNITY = vec![
-		/* k=0          r=1          */ Fr::from_str("1", 10),
-		/* k=1          r=2          */ Fr::from_str("52435875175126190479447740508185965837690552500527637822603658699938581184512", 10),
-		/* k=2          r=4          */ Fr::from_str("3465144826073652318776269530687742778270252468765361963008", 10),
-		/* k=3          r=8          */ Fr::from_str("28761180743467419819834788392525162889723178799021384024940474588120723734663", 10),
-		/* k=4          r=16         */ Fr::from_str("35811073542294463015946892559272836998938171743018714161809767624935956676211", 10),
-		/* k=5          r=32         */ Fr::from_str("32311457133713125762627935188100354218453688428796477340173861531654182464166", 10),
-		/* k=6          r=64         */ Fr::from_str("6460039226971164073848821215333189185736442942708452192605981749202491651199", 10),
-		/* k=7          r=128        */ Fr::from_str("3535074550574477753284711575859241084625659976293648650204577841347885064712", 10),
-		/* k=8          r=256        */ Fr::from_str("21071158244812412064791010377580296085971058123779034548857891862303448703672", 10),
-		/* k=9          r=512        */ Fr::from_str("12531186154666751577774347439625638674013361494693625348921624593362229945844", 10),
-		/* k=10         r=1024       */ Fr::from_str("21328829733576761151404230261968752855781179864716879432436835449516750606329", 10),
-		/* k=11         r=2048       */ Fr::from_str("30450688096165933124094588052280452792793350252342406284806180166247113753719", 10),
-		/* k=12         r=4096       */ Fr::from_str("7712148129911606624315688729500842900222944762233088101895611600385646063109", 10),
-		/* k=13         r=8192       */ Fr::from_str("4862464726302065505506688039068558711848980475932963135959468859464391638674", 10),
-		/* k=14         r=16384      */ Fr::from_str("36362449573598723777784795308133589731870287401357111047147227126550012376068", 10),
-		/* k=15         r=32768      */ Fr::from_str("30195699792882346185164345110260439085017223719129789169349923251189180189908", 10),
-		/* k=16         r=65536      */ Fr::from_str("46605497109352149548364111935960392432509601054990529243781317021485154656122", 10),
-		/* k=17         r=131072     */ Fr::from_str("2655041105015028463885489289298747241391034429256407017976816639065944350782", 10),
-		/* k=18         r=262144     */ Fr::from_str("42951892408294048319804799042074961265671975460177021439280319919049700054024", 10),
-		/* k=19         r=524288     */ Fr::from_str("26418991338149459552592774439099778547711964145195139895155358980955972635668", 10),
-		/* k=20         r=1048576    */ Fr::from_str("23615957371642610195417524132420957372617874794160903688435201581369949179370", 10),
-		/* k=21         r=2097152    */ Fr::from_str("50175287592170768174834711592572954584642344504509533259061679462536255873767", 10),
-		/* k=22         r=4194304    */ Fr::from_str("1664636601308506509114953536181560970565082534259883289958489163769791010513", 10),
-		/* k=23         r=8388608    */ Fr::from_str("36760611456605667464829527713580332378026420759024973496498144810075444759800", 10),
-		/* k=24         r=16777216   */ Fr::from_str("13205172441828670567663721566567600707419662718089030114959677511969243860524", 10),
-		/* k=25         r=33554432   */ Fr::from_str("10335750295308996628517187959952958185340736185617535179904464397821611796715", 10),
-		/* k=26         r=67108864   */ Fr::from_str("51191008403851428225654722580004101559877486754971092640244441973868858562750", 10),
-		/* k=27         r=134217728  */ Fr::from_str("24000695595003793337811426892222725080715952703482855734008731462871475089715", 10),
-		/* k=28         r=268435456  */ Fr::from_str("18727201054581607001749469507512963489976863652151448843860599973148080906836", 10),
-		/* k=29         r=536870912  */ Fr::from_str("50819341139666003587274541409207395600071402220052213520254526953892511091577", 10),
-		/* k=30         r=1073741824 */ Fr::from_str("3811138593988695298394477416060533432572377403639180677141944665584601642504", 10),
-		/* k=31         r=2147483648 */ Fr::from_str("43599901455287962219281063402626541872197057165786841304067502694013639882090", 10),
+		/* k=0          r=1          */ "1",
+		/* k=1          r=2          */ "52435875175126190479447740508185965837690552500527637822603658699938581184512",
+		/* k=2          r=4          */ "3465144826073652318776269530687742778270252468765361963008",
+		/* k=3          r=8          */ "28761180743467419819834788392525162889723178799021384024940474588120723734663",
+		/* k=4          r=16         */ "35811073542294463015946892559272836998938171743018714161809767624935956676211",
+		/* k=5          r=32         */ "32311457133713125762627935188100354218453688428796477340173861531654182464166",
+		/* k=6          r=64         */ "6460039226971164073848821215333189185736442942708452192605981749202491651199",
+		/* k=7          r=128        */ "3535074550574477753284711575859241084625659976293648650204577841347885064712",
+		/* k=8          r=256        */ "21071158244812412064791010377580296085971058123779034548857891862303448703672",
+		/* k=9          r=512        */ "12531186154666751577774347439625638674013361494693625348921624593362229945844",
+		/* k=10         r=1024       */ "21328829733576761151404230261968752855781179864716879432436835449516750606329",
+		/* k=11         r=2048       */ "30450688096165933124094588052280452792793350252342406284806180166247113753719",
+		/* k=12         r=4096       */ "7712148129911606624315688729500842900222944762233088101895611600385646063109",
+		/* k=13         r=8192       */ "4862464726302065505506688039068558711848980475932963135959468859464391638674",
+		/* k=14         r=16384      */ "36362449573598723777784795308133589731870287401357111047147227126550012376068",
+		/* k=15         r=32768      */ "30195699792882346185164345110260439085017223719129789169349923251189180189908",
+		/* k=16         r=65536      */ "46605497109352149548364111935960392432509601054990529243781317021485154656122",
+		/* k=17         r=131072     */ "2655041105015028463885489289298747241391034429256407017976816639065944350782",
+		/* k=18         r=262144     */ "42951892408294048319804799042074961265671975460177021439280319919049700054024",
+		/* k=19         r=524288     */ "26418991338149459552592774439099778547711964145195139895155358980955972635668",
+		/* k=20         r=1048576    */ "23615957371642610195417524132420957372617874794160903688435201581369949179370",
+		/* k=21         r=2097152    */ "50175287592170768174834711592572954584642344504509533259061679462536255873767",
+		/* k=22         r=4194304    */ "1664636601308506509114953536181560970565082534259883289958489163769791010513",
+		/* k=23         r=8388608    */ "36760611456605667464829527713580332378026420759024973496498144810075444759800",
+		/* k=24         r=16777216   */ "13205172441828670567663721566567600707419662718089030114959677511969243860524",
+		/* k=25         r=33554432   */ "10335750295308996628517187959952958185340736185617535179904464397821611796715",
+		/* k=26         r=67108864   */ "51191008403851428225654722580004101559877486754971092640244441973868858562750",
+		/* k=27         r=134217728  */ "24000695595003793337811426892222725080715952703482855734008731462871475089715",
+		/* k=28         r=268435456  */ "18727201054581607001749469507512963489976863652151448843860599973148080906836",
+		/* k=29         r=536870912  */ "50819341139666003587274541409207395600071402220052213520254526953892511091577",
+		/* k=30         r=1073741824 */ "3811138593988695298394477416060533432572377403639180677141944665584601642504",
+		/* k=31         r=2147483648 */ "43599901455287962219281063402626541872197057165786841304067502694013639882090",
     ].into_iter()
-    .map(|x| x.unwrap())
+    .map(|x| Fr::from_str(x, 10).unwrap())
     .collect();
 
     GLOBALS_INITIALIZED = true;
@@ -1021,7 +1021,8 @@ impl FFTSettings {
 pub struct FK20Matrix {
     pub curve: Curve,
     pub x_ext_fft_files: Vec<Vec<G1>>,
-    pub fft_settings: FFTSettings
+    pub fft_settings: FFTSettings,
+    pub chunk_len: usize,
 }
 
 impl FK20Matrix {
@@ -1043,7 +1044,8 @@ impl FK20Matrix {
         FK20Matrix {
             curve,
             x_ext_fft_files,
-            fft_settings
+            fft_settings,
+            chunk_len
         }
     }
     
@@ -1083,23 +1085,16 @@ impl FK20Matrix {
         return x_ext_fft;
     }
 
-    // TODO: move, no inv version (fft_g1_inv)
     pub fn fft_g1(fft_settings: &FFTSettings, values: &Vec<G1>) -> Vec<G1> {
-        // TODO: panic checks
-        // n > ftt.MAX_W
-        // n ! pow of 2
-        
         // TODO: check if copy can be removed, opt?
         let vals_copy = values.clone();
         
-        // let out = vec![G1::default(); values.len()];
         let root_z: Vec<Fr> = fft_settings.exp_roots_of_unity.iter()
             .take(fft_settings.max_width)
             .map(|x| x.clone())
             .collect();
 
         let stride = fft_settings.max_width /  values.len();
-
         let mut out = vec![G1::zero(); values.len()];
 
         FK20Matrix::_fft_g1(&fft_settings, &vals_copy, 0, 1, &root_z, stride, &mut out);
@@ -1107,11 +1102,127 @@ impl FK20Matrix {
         return out;
     }
 
+
+    pub fn fft_g1_inv(&self, values: &Vec<G1>) -> Vec<G1> {
+        // TODO: check if copy can be removed, opt?
+        let vals_copy = values.clone();
+        
+        let root_z: Vec<Fr> = self.fft_settings.exp_roots_of_unity_rev.iter()
+            .take(self.fft_settings.max_width)
+            .map(|x| x.clone())
+            .collect();
+
+        let stride = self.fft_settings.max_width /  values.len();
+        let mut out = vec![G1::zero(); values.len()];
+
+        FK20Matrix::_fft_g1(&self.fft_settings, &vals_copy, 0, 1, &root_z, stride, &mut out);
+
+
+        let len_as_fr = Fr::from_int(values.len() as i32);
+        let mut inv_len = Fr::default();
+        Fr::inv(&mut inv_len, &len_as_fr);
+
+        for i in 0..out.len() {
+            let tmp = &out[i] * &inv_len;
+            out[i] = tmp;
+        }
+
+        return out;
+    }
+
+    fn _fft(&self, values: &Vec<Fr>, offset: usize, stride: usize, roots_of_unity: &Vec<Fr>, root_stride: usize, out: &mut [Fr]) {
+        // check if correct value is checked in case of a bug!
+        if out.len() <= 4 { // if the value count is small, run the unoptimized version instead. // TODO tune threshold.
+            return self._simple_ftt(values, offset, stride, roots_of_unity, root_stride, out);
+        }
+
+        let half = out.len() >> 1;
+
+        // left
+        self._fft(values, offset, stride << 1, roots_of_unity, root_stride << 1, &mut out[..half]);
+        // right
+        self._fft(values, offset + stride, stride << 1, roots_of_unity, root_stride << 1, &mut out[half..]);
+
+        for i in 0..half {
+            let x = out[i].clone();
+            let y = out[i + half].clone();
+            let root = &roots_of_unity[i * root_stride];
+
+            let y_times_root = &y * root;
+            out[i] = &x + &y_times_root;
+            out[i + half] = &x - &y_times_root;
+        }
+    }
+
+    fn _simple_ftt(&self, values: &Vec<Fr>, offset: usize, stride: usize, roots_of_unity: &Vec<Fr>, root_stride: usize, out: &mut [Fr]) {
+        let out_len = out.len();
+        let init_last = &values[offset] * &roots_of_unity[0];
+
+        for i in 0..out_len {
+            let mut last = init_last.clone();
+            for j in 1..out_len {
+                let jv = &values[offset + j * stride];
+                let r = &roots_of_unity[((i * j) % out_len) * root_stride];
+                // last += (jv * r)
+                last = &last.clone() + &(jv * r);
+            }
+            out[i] = last;
+        }
+    }
+
+    pub fn inplace_fft(&self, values: &Vec<Fr>) -> Vec<Fr> {
+        let root_z: Vec<Fr> = self.fft_settings.exp_roots_of_unity.iter().map(|x| x.clone()).take(self.fft_settings.max_width).collect();
+        let stride = self.fft_settings.max_width / values.len();
+
+        let mut out = vec![Fr::default(); values.len()];
+        self._fft(&values, 0, 1, &root_z, stride, &mut out);
+
+        return out;
+    }
+
+    pub fn fft(&self, values: &Vec<Fr>) -> Vec<Fr> {
+        let n = next_pow_of_2(values.len());
+        
+        let diff = n - values.len();
+        let tail= iter::repeat(Fr::zero()).take(diff);
+        let values_copy: Vec<Fr> = values.iter()
+            .map(|x| x.clone())
+            .chain(tail)
+            .collect();
+
+        return self.inplace_fft(&values_copy);
+    }
+
+    pub fn dau_using_fk20_multi(&self, polynomial: &Polynomial) -> Vec<G1> {
+        let n = polynomial.order();
+        //TODO: checks? -> perfmance hit tho?
+        let n2 = n << 1;
+        let extended_poly = polynomial.get_extended(n2);
+
+        let mut proofs = extended_poly.fk20_multi_dao_optimized(&self);
+
+        FK20Matrix::_order_by_rev_bit_order_g1(&mut proofs);
+
+        return proofs;
+    }
+    
+    fn _order_by_rev_bit_order_g1(points: &mut Vec<G1>) {
+        //assert!(points.len() & (points.len() - 1) == 0);
+        let unused_bit_len = points.len().leading_zeros() + 1;
+        for i in 0..points.len() {
+            let r = i.reverse_bits() >> unused_bit_len;
+            if r > i {
+                let tmp = points[r].clone();
+                points[r] = points[i].clone();
+                points[i] = tmp;
+            }
+        }
+    }
+
     fn _fft_g1(fft_settings: &FFTSettings, values: &Vec<G1>, value_offset: usize, value_stride: usize, roots_of_unity: &Vec<Fr>, roots_stride: usize, out: &mut [G1]) {
-        //TODO: fine tune for opt, maybe resolve number dinamically based on expiriments
+        //TODO: fine tune for opt, maybe resolve number dinamically based on experiments
         if out.len() <= 4 {
-            FK20Matrix::_fft_g1_simple(values, value_offset, value_stride, roots_of_unity, roots_stride, out);
-            return;
+            return FK20Matrix::_fft_g1_simple(values, value_offset, value_stride, roots_of_unity, roots_stride, out);
         }
 
         let half = out.len() >> 1;
@@ -1149,10 +1260,107 @@ impl FK20Matrix {
             out[i] = last;
         }
     }
+
+    fn toeplitz_coeffs_step_strided(&self, poly: &Vec<Fr>, offset: usize) -> Vec<Fr> {
+        let stride = self.chunk_len;
+        let n = poly.len();
+        let k = n / stride;
+        let k2 = k << 1;
+
+        // [last] + [0]*(n+1) + [1 .. n-2]
+        let mut toeplitz_coeffs = vec![Fr::zero(); k2];
+        toeplitz_coeffs[0] = poly[n - 1 - offset].clone();
+        
+        let mut j = (stride << 1) - offset - 1;
+        for i in k+2..k2 {
+            toeplitz_coeffs[i] = poly[j].clone();
+            j += stride;
+        }
+
+        return toeplitz_coeffs;
+    }
+
+    pub fn toeplitz_part_2(&self, coeffs: &Vec<Fr>, index: usize) -> Vec<G1> {
+        let toeplitz_coeffs_fft = self.fft(&coeffs);
+
+        let x_ext_fft = &self.x_ext_fft_files[index];
+
+        let h_ext_fft: Vec<G1> = x_ext_fft.iter()
+            .zip(toeplitz_coeffs_fft)
+            .map(|(g1, coeff)| g1 * &coeff)
+            .collect();
+
+        return h_ext_fft;
+    }
+
+    // TODO: optimization, reuse h_ext_fft
+    pub fn toeplitz_part_3(&self, h_ext_fft: &Vec<G1>) -> Vec<G1> {
+        let out = self.fft_g1_inv(&h_ext_fft);
+
+        // return half, can just resize the vector to be half.
+        return out.iter().take(out.len() >> 1).map(|x| x.clone()).collect();
+    }
+}
+
+impl Polynomial {
+    pub fn get_extended(&self, size: usize) -> Polynomial {
+        let to_pad = size - self.coeffs.len();
+        let tail = iter::repeat(Fr::zero()).take(to_pad);
+        let result: Vec<Fr> = self.coeffs.iter().map(|x| x.clone()).chain(tail).collect();
+
+        return Polynomial::from_fr(result);
+    }
+
+    pub fn fk20_multi_dao_optimized(&self, matrix: &FK20Matrix) -> Vec<G1> {
+        let n = self.order() >> 1;
+        let k = n / matrix.chunk_len;
+        let k2 = k << 1;
+        
+        let mut h_ext_fft = vec![G1::zero(); k2];
+        // TODO: this operates on an extended poly, but doesn't use the extended values?
+        // literally just using the poly without the zero trailing tail, makes more sense to take it in as a param, or use without the tail;
+        let reduced_poly: Vec<Fr> = self.coeffs.iter().map(|x| x.clone()).take(n).collect();
+
+        for i in 0..matrix.chunk_len {
+            let toeplitz_coeffs = matrix.toeplitz_coeffs_step_strided(&reduced_poly, i);
+            let h_ext_fft_file = matrix.toeplitz_part_2(&toeplitz_coeffs, i);
+
+            for j in 0..k2 {
+                let tmp = &h_ext_fft[j] + &h_ext_fft_file[j];
+                h_ext_fft[j] = tmp;
+            }
+        }
+        
+        let tail = iter::repeat(G1::zero()).take(k);
+        let h: Vec<G1> = matrix.toeplitz_part_3(&h_ext_fft)
+            .into_iter()
+            .take(k)
+            .chain(tail)
+            .collect();
+        
+        return FK20Matrix::fft_g1(&matrix.fft_settings, &h);
+    }
 }
 
 // Misc
 
 pub fn is_power_of_2(n: usize) -> bool {
     return n & (n - 1) == 0;
+}
+
+const fn num_bits<T>() -> usize { std::mem::size_of::<T>() * 8 }
+
+pub fn log_2(x: usize) -> usize {
+    assert!(x > 0);
+    num_bits::<usize>() as usize - (x.leading_zeros() as usize) - 1
+}
+
+pub fn next_pow_of_2(x: usize) -> usize {
+    if x == 0 {
+        return 1;
+    }
+    if is_power_of_2(x) {
+        return x;
+    }
+    return 1 << (log_2(x) + 1);
 }
