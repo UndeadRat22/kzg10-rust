@@ -466,7 +466,7 @@ fn get_next_power_of_two_returns_correct_values() {
 }
 
 #[test]
-fn foo() {
+fn dau_using_fk20_multi_generates_exact_values_given_known_inputs() {
     // Arrange
     assert!(init(CurveType::BLS12_381));
     let chunk_len: usize = 16;
@@ -551,6 +551,54 @@ fn foo() {
     for (actual, expected) in proofs.iter().zip(expected) {
         assert_eq!(expected, actual.get_str(10));
     }
+}
+
+#[test]
+fn fr_fft_works_on_extended_data() {
+    // Arrange
+    assert!(init(CurveType::BLS12_381));
+    let chunk_len: usize = 16;
+    let chunk_count: usize = 32;
+    let n = chunk_len * chunk_count;
+    let secret = Fr::from_str("1927409816240961209460912649124", 10).unwrap();
+    let kzg_curve = Curve::new(&secret, n * 2);
+    let matrix = FK20Matrix::new(kzg_curve, n * 2, chunk_len, 10);
+    let polynomial = build_protolambda_poly(chunk_count, chunk_len, n);
+    
+    // Act
+    let extended_poly = polynomial.get_extended(n * 2);
+    let mut extended_data = matrix.fft(&extended_poly.coeffs);
+    order_by_rev_bit_order(&mut extended_data);
+
+    // Assert
+    assert_eq!(1024, extended_data.len());
+    assert_eq!("23460229677428266615002007477956548356146403649357635172538975946710492134789", extended_data.last().unwrap().get_str(10));
+}
+
+#[test]
+fn foo() {
+    // Arrange
+    assert!(init(CurveType::BLS12_381));
+    let chunk_len: usize = 16;
+    let chunk_count: usize = 32;
+    let n = chunk_len * chunk_count;
+    let n2 = n << 1;
+    let secret = Fr::from_str("1927409816240961209460912649124", 10).unwrap();
+    let kzg_curve = Curve::new(&secret, n2);
+    let matrix = FK20Matrix::new(kzg_curve, n2, chunk_len, 10);
+    let polynomial = build_protolambda_poly(chunk_count, chunk_len, n);
+    let extended_poly = polynomial.get_extended(n2);
+    let mut extended_data = matrix.fft(&extended_poly.coeffs);
+    order_by_rev_bit_order(&mut extended_data);
+    
+    let domain_stride = matrix.fft_settings.max_width / n2;
+    for pos in 0..(chunk_count * 2) {
+        let domain_pos = reverse_bits_limited(chunk_count, pos);
+    }
+    // Act
+
+
+    // Assert
 }
 
 // Helpers

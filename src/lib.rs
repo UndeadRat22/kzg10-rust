@@ -1,4 +1,4 @@
-use std::{cmp::min, iter, mem::{MaybeUninit}, ops, usize};
+use std::{cell::UnsafeCell, cmp::min, iter, mem::{MaybeUninit}, ops, usize};
 use std::ops::{Add, AddAssign};
 use std::ops::{Div, DivAssign};
 use std::ops::{Mul, MulAssign};
@@ -1201,22 +1201,9 @@ impl FK20Matrix {
 
         let mut proofs = extended_poly.fk20_multi_dao_optimized(&self);
 
-        FK20Matrix::_order_by_rev_bit_order_g1(&mut proofs);
+        order_by_rev_bit_order(&mut proofs);
 
         return proofs;
-    }
-    
-    fn _order_by_rev_bit_order_g1(points: &mut Vec<G1>) {
-        //assert!(points.len() & (points.len() - 1) == 0);
-        let unused_bit_len = points.len().leading_zeros() + 1;
-        for i in 0..points.len() {
-            let r = i.reverse_bits() >> unused_bit_len;
-            if r > i {
-                let tmp = points[r].clone();
-                points[r] = points[i].clone();
-                points[i] = tmp;
-            }
-        }
     }
 
     fn _fft_g1(fft_settings: &FFTSettings, values: &Vec<G1>, value_offset: usize, value_stride: usize, roots_of_unity: &Vec<Fr>, roots_stride: usize, out: &mut [G1]) {
@@ -1343,6 +1330,17 @@ impl Polynomial {
 }
 
 // Misc
+pub fn order_by_rev_bit_order<T>(vals: &mut Vec<T>) where T : Clone {
+    let unused_bit_len = vals.len().leading_zeros() + 1;
+     for i in 0..vals.len() {
+         let r = i.reverse_bits() >> unused_bit_len;
+         if r > i {
+            let tmp = vals[r].clone();
+            vals[r] = vals[i].clone();
+            vals[i] = tmp;
+         }
+     }
+}
 
 pub fn is_power_of_2(n: usize) -> bool {
     return n & (n - 1) == 0;
@@ -1363,4 +1361,9 @@ pub fn next_pow_of_2(x: usize) -> usize {
         return x;
     }
     return 1 << (log_2(x) + 1);
+}
+
+pub fn reverse_bits_limited(length: usize, value: usize) -> usize {
+    let unused_bits = value.leading_zeros();
+    return value.reverse_bits() >> unused_bits;
 }
