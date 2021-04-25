@@ -1,4 +1,4 @@
-use std::{cell::UnsafeCell, cmp::min, iter, mem::{MaybeUninit}, ops, usize};
+use std::{cmp::min, iter, mem::{MaybeUninit}, ops, usize};
 use std::ops::{Add, AddAssign};
 use std::ops::{Div, DivAssign};
 use std::ops::{Mul, MulAssign};
@@ -761,14 +761,19 @@ impl ops::Sub<G2> for G2 {
 
 impl Fr {
     pub fn one() -> Fr {
-        let mut fr = Fr::default();
-        fr.set_int(1);
-        
-        return fr;
+        Fr::from_int(1)
     }
+
     pub fn get_neg(&self) -> Fr {
         let mut fr = Fr::default();
         Fr::neg(&mut fr, self);
+
+        return fr;
+    }
+
+    pub fn get_inv(&self) -> Fr {
+        let mut fr = Fr::default();
+        Fr::inv(&mut fr, self);
 
         return fr;
     }
@@ -916,8 +921,12 @@ impl Curve {
         let secret_minus_x = &self.g2_points[1] - &(&self.g2_gen * x); // g2 * x to get x on g2
         let commitment_minus_y = commitment - &(&self.g1_gen * y);
 
-        let pairing1 = commitment_minus_y.pair(&self.g2_gen).get_inv();
-        let pairing2 = proof.pair(&secret_minus_x);
+        return self.verify_pairing(&commitment_minus_y, &self.g2_gen, proof, &secret_minus_x);
+    }
+
+    pub fn verify_pairing(&self, a1: &G1, a2: &G2, b1: &G1, b2: &G2) -> bool {
+        let pairing1 = a1.pair(&a2).get_inv();
+        let pairing2 = b1.pair(&b2);
 
         let result = (pairing1 * pairing2).get_final_exp();
 
@@ -1116,12 +1125,8 @@ impl FK20Matrix {
         let mut out = vec![G1::zero(); values.len()];
 
         FK20Matrix::_fft_g1(&self.fft_settings, &vals_copy, 0, 1, &root_z, stride, &mut out);
-
-
-        let len_as_fr = Fr::from_int(values.len() as i32);
-        let mut inv_len = Fr::default();
-        Fr::inv(&mut inv_len, &len_as_fr);
-
+        
+        let inv_len = Fr::from_int(values.len() as i32).get_inv();
         for i in 0..out.len() {
             let tmp = &out[i] * &inv_len;
             out[i] = tmp;
@@ -1170,17 +1175,32 @@ impl FK20Matrix {
         }
     }
 
-    pub fn inplace_fft(&self, values: &Vec<Fr>) -> Vec<Fr> {
-        let root_z: Vec<Fr> = self.fft_settings.exp_roots_of_unity.iter().map(|x| x.clone()).take(self.fft_settings.max_width).collect();
-        let stride = self.fft_settings.max_width / values.len();
+    pub fn inplace_fft(&self, values: &Vec<Fr>, inv: bool) -> Vec<Fr> {
+        
+        if inv {
+            let root_z: Vec<Fr> = self.fft_settings.exp_roots_of_unity_rev.iter().map(|x| x.clone()).take(self.fft_settings.max_width).collect();
+            let stride = self.fft_settings.max_width / values.len();
 
-        let mut out = vec![Fr::default(); values.len()];
-        self._fft(&values, 0, 1, &root_z, stride, &mut out);
+            let mut out = vec![Fr::default(); values.len()];
+            self._fft(&values, 0, 1, &root_z, stride, &mut out);
 
-        return out;
+            let inv_len = Fr::from_int(values.len() as i32).get_inv();
+            for i in 0..out.len() {
+                out[i] = &out[i].clone() * &inv_len;
+            }
+            return out;
+        } else {
+            let root_z: Vec<Fr> = self.fft_settings.exp_roots_of_unity.iter().map(|x| x.clone()).take(self.fft_settings.max_width).collect();
+            let stride = self.fft_settings.max_width / values.len();
+
+            let mut out = vec![Fr::default(); values.len()];
+            self._fft(&values, 0, 1, &root_z, stride, &mut out);
+
+            return out;
+        }
     }
 
-    pub fn fft(&self, values: &Vec<Fr>) -> Vec<Fr> {
+    pub fn fft(&self, values: &Vec<Fr>, inv: bool) -> Vec<Fr> {
         let n = next_pow_of_2(values.len());
         
         let diff = n - values.len();
@@ -1190,7 +1210,7 @@ impl FK20Matrix {
             .chain(tail)
             .collect();
 
-        return self.inplace_fft(&values_copy);
+        return self.inplace_fft(&values_copy, inv);
     }
 
     pub fn dau_using_fk20_multi(&self, polynomial: &Polynomial) -> Vec<G1> {
@@ -1268,7 +1288,7 @@ impl FK20Matrix {
     }
 
     pub fn toeplitz_part_2(&self, coeffs: &Vec<Fr>, index: usize) -> Vec<G1> {
-        let toeplitz_coeffs_fft = self.fft(&coeffs);
+        let toeplitz_coeffs_fft = self.fft(&coeffs, false);
 
         let x_ext_fft = &self.x_ext_fft_files[index];
 
@@ -1286,6 +1306,27 @@ impl FK20Matrix {
 
         // return half, can just resize the vector to be half.
         return out.iter().take(out.len() >> 1).map(|x| x.clone()).collect();
+    }
+
+    pub fn check_proof_multi(&self, commitment: &G1, proof: &G1, x: &Fr, ys: &Vec<Fr>) -> bool {
+        let mut interpolation_poly = self.fft(&ys, true);
+        let mut x_pow = Fr::one();
+        for i in 0.. interpolation_poly.len() {
+            interpolation_poly[i] *= &x_pow.get_inv();
+            x_pow *= x;
+        }
+
+        let xn2 = &self.curve.g2_gen * &x_pow;
+        let xn_minus_yn = &self.curve.g2_points[ys.len()] - &xn2;
+
+        let mut result = G1::default();
+        unsafe {
+            mclBnG1_mulVec(&mut result, self.curve.g1_points.as_ptr(), interpolation_poly.as_ptr(), interpolation_poly.len())
+        };
+
+        let commit_minus_interp = commitment - &result;
+
+        return self.curve.verify_pairing(&commit_minus_interp, &self.curve.g2_gen, &proof, &&xn_minus_yn);
     }
 }
 
@@ -1364,6 +1405,6 @@ pub fn next_pow_of_2(x: usize) -> usize {
 }
 
 pub fn reverse_bits_limited(length: usize, value: usize) -> usize {
-    let unused_bits = value.leading_zeros();
+    let unused_bits = length.leading_zeros();
     return value.reverse_bits() >> unused_bits;
 }

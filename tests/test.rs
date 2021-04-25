@@ -567,7 +567,7 @@ fn fr_fft_works_on_extended_data() {
     
     // Act
     let extended_poly = polynomial.get_extended(n * 2);
-    let mut extended_data = matrix.fft(&extended_poly.coeffs);
+    let mut extended_data = matrix.fft(&extended_poly.coeffs, false);
     order_by_rev_bit_order(&mut extended_data);
 
     // Assert
@@ -576,7 +576,7 @@ fn fr_fft_works_on_extended_data() {
 }
 
 #[test]
-fn foo() {
+fn fk20_multi_proof_full_circle_fixed_value() {
     // Arrange
     assert!(init(CurveType::BLS12_381));
     let chunk_len: usize = 16;
@@ -587,18 +587,87 @@ fn foo() {
     let kzg_curve = Curve::new(&secret, n2);
     let matrix = FK20Matrix::new(kzg_curve, n2, chunk_len, 10);
     let polynomial = build_protolambda_poly(chunk_count, chunk_len, n);
+    let proofs = matrix.dau_using_fk20_multi(&polynomial);
     let extended_poly = polynomial.get_extended(n2);
-    let mut extended_data = matrix.fft(&extended_poly.coeffs);
+    let commitment = polynomial.commit(&matrix.curve.g1_points);
+    let mut extended_data = matrix.fft(&extended_poly.coeffs, false);
     order_by_rev_bit_order(&mut extended_data);
     
+    // Act
     let domain_stride = matrix.fft_settings.max_width / n2;
     for pos in 0..(chunk_count * 2) {
         let domain_pos = reverse_bits_limited(chunk_count, pos);
+        let x = &matrix.fft_settings.exp_roots_of_unity[domain_pos * domain_stride];
+
+        let mut ys: Vec<Fr> = extended_data.iter()
+            .map(|x| x.clone())
+            .skip(chunk_len * pos).take(chunk_len)
+            .collect();
+        order_by_rev_bit_order(&mut ys);
+
+        let mut ys2 = vec![Fr::default(); chunk_len];
+        let stride = matrix.fft_settings.max_width / chunk_len;
+        let mut coset = vec![Fr::default(); chunk_len];
+        for i in 0..chunk_len {
+            coset[i] = x * &matrix.fft_settings.exp_roots_of_unity[i * stride];
+            ys2[i] = polynomial.eval_at(&coset[i]);
+        }
+        // Assert
+        for (a, b) in ys.iter().zip(ys2) {
+            assert_eq!(a.get_str(10), b.get_str(10));
+        }
+        let proof = &proofs[pos];
+        let valid = matrix.check_proof_multi(&commitment, proof, &x, &ys);
+        assert!(valid);
     }
+}
+
+#[test]
+fn fk20_multi_proof_full_circle_random_secret() {
+    // Arrange
+    assert!(init(CurveType::BLS12_381));
+    let chunk_len: usize = 16;
+    let chunk_count: usize = 32;
+    let n = chunk_len * chunk_count;
+    let n2 = n << 1;
+    let mut secret = Fr::default();
+    secret.set_by_csprng();
+    let kzg_curve = Curve::new(&secret, n2);
+    let matrix = FK20Matrix::new(kzg_curve, n2, chunk_len, 10);
+    let polynomial = build_protolambda_poly(chunk_count, chunk_len, n);
+    let proofs = matrix.dau_using_fk20_multi(&polynomial);
+    let extended_poly = polynomial.get_extended(n2);
+    let commitment = polynomial.commit(&matrix.curve.g1_points);
+    let mut extended_data = matrix.fft(&extended_poly.coeffs, false);
+    order_by_rev_bit_order(&mut extended_data);
+    
     // Act
+    let domain_stride = matrix.fft_settings.max_width / n2;
+    for pos in 0..(chunk_count * 2) {
+        let domain_pos = reverse_bits_limited(chunk_count, pos);
+        let x = &matrix.fft_settings.exp_roots_of_unity[domain_pos * domain_stride];
 
+        let mut ys: Vec<Fr> = extended_data.iter()
+            .map(|x| x.clone())
+            .skip(chunk_len * pos).take(chunk_len)
+            .collect();
+        order_by_rev_bit_order(&mut ys);
 
-    // Assert
+        let mut ys2 = vec![Fr::default(); chunk_len];
+        let stride = matrix.fft_settings.max_width / chunk_len;
+        let mut coset = vec![Fr::default(); chunk_len];
+        for i in 0..chunk_len {
+            coset[i] = x * &matrix.fft_settings.exp_roots_of_unity[i * stride];
+            ys2[i] = polynomial.eval_at(&coset[i]);
+        }
+        // Assert
+        for (a, b) in ys.iter().zip(ys2) {
+            assert_eq!(a.get_str(10), b.get_str(10));
+        }
+        let proof = &proofs[pos];
+        let valid = matrix.check_proof_multi(&commitment, proof, &x, &ys);
+        assert!(valid);
+    }
 }
 
 // Helpers
