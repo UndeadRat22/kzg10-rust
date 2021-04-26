@@ -777,6 +777,13 @@ impl Fr {
 
         return fr;
     }
+
+    pub fn random() -> Fr {
+        let mut fr = Fr::default();
+        Fr::set_by_csprng(&mut fr);
+
+        return fr;
+    }
 }
 
 impl ops::Mul<Fr> for Fr {
@@ -889,6 +896,17 @@ impl Polynomial {
             mclBnG1_mulVec(&mut result, g1_points.as_ptr(), self.coeffs.as_ptr(), min(g1_points.len(), self.order()))
         };
         return result;
+    }
+
+    pub fn random(order: usize) -> Polynomial {
+        let coeffs = iter::repeat(0)
+            .take(order)
+            .map(|_| Fr::random())
+            .collect();
+
+        return Polynomial {
+            coeffs
+        };
     }
 }
 
