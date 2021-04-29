@@ -957,6 +957,7 @@ impl Curve {
 
 pub static mut SCALE_2_ROOT_OF_UNITY: Vec<Fr> = vec![];
 pub static mut GLOBALS_INITIALIZED: bool = false;
+pub const PRIMITIVE_ROOT: i32 = 5;
 
 pub unsafe fn init_globals() {
     if GLOBALS_INITIALIZED {
@@ -1041,6 +1042,84 @@ impl FFTSettings {
             exp_roots_of_unity: root_z,
             exp_roots_of_unity_rev: root_z_rev
         }
+    }
+
+    fn _fft(&self, values: &Vec<Fr>, offset: usize, stride: usize, roots_of_unity: &Vec<Fr>, root_stride: usize, out: &mut [Fr]) {
+        // check if correct value is checked in case of a bug!
+        if out.len() <= 4 { // if the value count is small, run the unoptimized version instead. // TODO tune threshold.
+            return self._simple_ftt(values, offset, stride, roots_of_unity, root_stride, out);
+        }
+
+        let half = out.len() >> 1;
+
+        // left
+        self._fft(values, offset, stride << 1, roots_of_unity, root_stride << 1, &mut out[..half]);
+        // right
+        self._fft(values, offset + stride, stride << 1, roots_of_unity, root_stride << 1, &mut out[half..]);
+
+        for i in 0..half {
+            let x = out[i].clone();
+            let y = out[i + half].clone();
+            let root = &roots_of_unity[i * root_stride];
+
+            let y_times_root = &y * root;
+            out[i] = &x + &y_times_root;
+            out[i + half] = &x - &y_times_root;
+        }
+    }
+
+    fn _simple_ftt(&self, values: &Vec<Fr>, offset: usize, stride: usize, roots_of_unity: &Vec<Fr>, root_stride: usize, out: &mut [Fr]) {
+        let out_len = out.len();
+        let init_last = &values[offset] * &roots_of_unity[0];
+
+        for i in 0..out_len {
+            let mut last = init_last.clone();
+            for j in 1..out_len {
+                let jv = &values[offset + j * stride];
+                let r = &roots_of_unity[((i * j) % out_len) * root_stride];
+                // last += (jv * r)
+                last = &last.clone() + &(jv * r);
+            }
+            out[i] = last;
+        }
+    }
+
+    pub fn inplace_fft(&self, values: &Vec<Fr>, inv: bool) -> Vec<Fr> {
+        
+        if inv {
+            let root_z: Vec<Fr> = self.exp_roots_of_unity_rev.iter().map(|x| x.clone()).take(self.max_width).collect();
+            let stride = self.max_width / values.len();
+
+            let mut out = vec![Fr::default(); values.len()];
+            self._fft(&values, 0, 1, &root_z, stride, &mut out);
+
+            let inv_len = Fr::from_int(values.len() as i32).get_inv();
+            for i in 0..out.len() {
+                out[i] = &out[i].clone() * &inv_len;
+            }
+            return out;
+        } else {
+            let root_z: Vec<Fr> = self.exp_roots_of_unity.iter().map(|x| x.clone()).take(self.max_width).collect();
+            let stride = self.max_width / values.len();
+
+            let mut out = vec![Fr::default(); values.len()];
+            self._fft(&values, 0, 1, &root_z, stride, &mut out);
+
+            return out;
+        }
+    }
+
+    pub fn fft(&self, values: &Vec<Fr>, inv: bool) -> Vec<Fr> {
+        let n = next_pow_of_2(values.len());
+        
+        let diff = n - values.len();
+        let tail= iter::repeat(Fr::zero()).take(diff);
+        let values_copy: Vec<Fr> = values.iter()
+            .map(|x| x.clone())
+            .chain(tail)
+            .collect();
+
+        return self.inplace_fft(&values_copy, inv);
     }
 }
 
@@ -1153,84 +1232,6 @@ impl FK20Matrix {
         return out;
     }
 
-    fn _fft(&self, values: &Vec<Fr>, offset: usize, stride: usize, roots_of_unity: &Vec<Fr>, root_stride: usize, out: &mut [Fr]) {
-        // check if correct value is checked in case of a bug!
-        if out.len() <= 4 { // if the value count is small, run the unoptimized version instead. // TODO tune threshold.
-            return self._simple_ftt(values, offset, stride, roots_of_unity, root_stride, out);
-        }
-
-        let half = out.len() >> 1;
-
-        // left
-        self._fft(values, offset, stride << 1, roots_of_unity, root_stride << 1, &mut out[..half]);
-        // right
-        self._fft(values, offset + stride, stride << 1, roots_of_unity, root_stride << 1, &mut out[half..]);
-
-        for i in 0..half {
-            let x = out[i].clone();
-            let y = out[i + half].clone();
-            let root = &roots_of_unity[i * root_stride];
-
-            let y_times_root = &y * root;
-            out[i] = &x + &y_times_root;
-            out[i + half] = &x - &y_times_root;
-        }
-    }
-
-    fn _simple_ftt(&self, values: &Vec<Fr>, offset: usize, stride: usize, roots_of_unity: &Vec<Fr>, root_stride: usize, out: &mut [Fr]) {
-        let out_len = out.len();
-        let init_last = &values[offset] * &roots_of_unity[0];
-
-        for i in 0..out_len {
-            let mut last = init_last.clone();
-            for j in 1..out_len {
-                let jv = &values[offset + j * stride];
-                let r = &roots_of_unity[((i * j) % out_len) * root_stride];
-                // last += (jv * r)
-                last = &last.clone() + &(jv * r);
-            }
-            out[i] = last;
-        }
-    }
-
-    pub fn inplace_fft(&self, values: &Vec<Fr>, inv: bool) -> Vec<Fr> {
-        
-        if inv {
-            let root_z: Vec<Fr> = self.fft_settings.exp_roots_of_unity_rev.iter().map(|x| x.clone()).take(self.fft_settings.max_width).collect();
-            let stride = self.fft_settings.max_width / values.len();
-
-            let mut out = vec![Fr::default(); values.len()];
-            self._fft(&values, 0, 1, &root_z, stride, &mut out);
-
-            let inv_len = Fr::from_int(values.len() as i32).get_inv();
-            for i in 0..out.len() {
-                out[i] = &out[i].clone() * &inv_len;
-            }
-            return out;
-        } else {
-            let root_z: Vec<Fr> = self.fft_settings.exp_roots_of_unity.iter().map(|x| x.clone()).take(self.fft_settings.max_width).collect();
-            let stride = self.fft_settings.max_width / values.len();
-
-            let mut out = vec![Fr::default(); values.len()];
-            self._fft(&values, 0, 1, &root_z, stride, &mut out);
-
-            return out;
-        }
-    }
-
-    pub fn fft(&self, values: &Vec<Fr>, inv: bool) -> Vec<Fr> {
-        let n = next_pow_of_2(values.len());
-        
-        let diff = n - values.len();
-        let tail= iter::repeat(Fr::zero()).take(diff);
-        let values_copy: Vec<Fr> = values.iter()
-            .map(|x| x.clone())
-            .chain(tail)
-            .collect();
-
-        return self.inplace_fft(&values_copy, inv);
-    }
-
     pub fn dau_using_fk20_multi(&self, polynomial: &Polynomial) -> Vec<G1> {
         let n = polynomial.order();
         //TODO: checks? -> perfmance hit tho?
@@ -1306,7 +1307,7 @@ impl FK20Matrix {
     }
 
     pub fn toeplitz_part_2(&self, coeffs: &Vec<Fr>, index: usize) -> Vec<G1> {
-        let toeplitz_coeffs_fft = self.fft(&coeffs, false);
+        let toeplitz_coeffs_fft = self.fft_settings.fft(&coeffs, false);
 
         let x_ext_fft = &self.x_ext_fft_files[index];
 
@@ -1327,7 +1328,7 @@ impl FK20Matrix {
     }
 
     pub fn check_proof_multi(&self, commitment: &G1, proof: &G1, x: &Fr, ys: &Vec<Fr>) -> bool {
-        let mut interpolation_poly = self.fft(&ys, true);
+        let mut interpolation_poly = self.fft_settings.fft(&ys, true);
         let mut x_pow = Fr::one();
         for i in 0.. interpolation_poly.len() {
             interpolation_poly[i] *= &x_pow.get_inv();
@@ -1349,12 +1350,16 @@ impl FK20Matrix {
 }
 
 impl Polynomial {
-    pub fn get_extended(&self, size: usize) -> Polynomial {
-        let to_pad = size - self.coeffs.len();
+    pub fn extend(vec: &Vec<Fr>, size: usize) -> Vec<Fr> {
+        let to_pad = size - vec.len();
         let tail = iter::repeat(Fr::zero()).take(to_pad);
-        let result: Vec<Fr> = self.coeffs.iter().map(|x| x.clone()).chain(tail).collect();
+        let result: Vec<Fr> = vec.iter().map(|x| x.clone()).chain(tail).collect();
 
-        return Polynomial::from_fr(result);
+        return result;
+    }
+
+    pub fn get_extended(&self, size: usize) -> Polynomial { 
+        return Polynomial::from_fr(Polynomial::extend(&self.coeffs, size));
     }
 
     pub fn fk20_multi_dao_optimized(&self, matrix: &FK20Matrix) -> Vec<G1> {
@@ -1446,16 +1451,94 @@ impl FFTSettings {
     }
 }
 
+// Data recovery
+
+impl Polynomial {
+    pub fn shift_in_place(&mut self) {
+        self._shift_in_place(&Fr::from_int(PRIMITIVE_ROOT));
+    }
+
+    pub fn unshift_in_place(&mut self) {
+        self._shift_in_place(&Fr::from_int(PRIMITIVE_ROOT).get_inv());
+    }
+
+    //TODO, use precalculated tables for factors?
+    pub fn _shift_in_place(&mut self, factor: &Fr){
+        let mut factor_to_power = Fr::one();
+        for i in 0..self.order() {
+            self.coeffs[i] *= &factor_to_power;
+            factor_to_power *= factor;
+        }
+    }
+}
+
+// Zero Poly
+
+impl FFTSettings {
+    pub fn unwrap_default(values: &Vec<Option<Fr>>) -> Vec<Fr> {
+        return values.iter().map(|x| {
+            if x.is_none() {
+                return Fr::zero()
+            }
+            return x.clone().unwrap();
+        }).collect();
+    }
+
+    pub fn zero_poly_via_multiplication(&self, indices: &[usize], length: usize) -> (Vec<Fr>, Vec<Fr>) {
+        if indices.is_empty() {
+            return (vec![Fr::zero(); length], vec![Fr::zero(); length]);
+        }
+
+        let stride = self.max_width / length;
+        let per_leaf_poly = 64;
+        let per_leaf = per_leaf_poly - 1;
+        if indices.len() <= per_leaf {
+            let mut zero_poly = vec![Fr::default(); length];
+            self.make_zero_poly_mul_leaf(&mut zero_poly, indices, stride);
+
+            zero_poly = self.fft(&zero_poly, false);
+        }
+
+        return (vec![], vec![]);
+    }
+    
+    pub fn make_zero_poly_mul_leaf(&self, dest: &mut Vec<Fr>, indices: &[usize], stride: usize) {
+        if (indices.len() + 1) > dest.len() {
+            panic!("expected bigger dest length");
+        }   
+        dest[indices.len()] = Fr::one();
+        
+        for (i, v) in indices.iter().enumerate() {
+            let neg_di = (&self.exp_roots_of_unity[v * stride]).get_neg(); //TODO: could be a bug check if neg is the same as 0-n;
+            dest[i] = neg_di.clone();
+            //TODO: opt, remove if
+            if i > 0 {
+                let temp = &dest[i] + &dest[i - 1];
+                dest[i] = temp;
+
+                for j in (i - 1)..0 {
+                    let temp = &dest[j] + &neg_di;
+                    dest[j] = temp;
+
+                    let temp = &dest[j] + &dest[j - 1];
+                    dest[j] = temp;
+                }
+                dest[0] *= &neg_di;
+            }
+        }
+    }
+}
+
 // Misc
 pub fn order_by_rev_bit_order<T>(vals: &mut Vec<T>) where T : Clone {
     let unused_bit_len = vals.len().leading_zeros() + 1;
      for i in 0..vals.len() {
-         let r = i.reverse_bits() >> unused_bit_len;
-         if r > i {
+        let r = i.reverse_bits() >> unused_bit_len;
+        if r > i {
             let tmp = vals[r].clone();
             vals[r] = vals[i].clone();
             vals[i] = tmp;
-         }
+        }
      }
 }
 

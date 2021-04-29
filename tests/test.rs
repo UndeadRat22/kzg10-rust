@@ -567,7 +567,7 @@ fn fr_fft_works_on_extended_data() {
     
     // Act
     let extended_poly = polynomial.get_extended(n * 2);
-    let mut extended_data = matrix.fft(&extended_poly.coeffs, false);
+    let mut extended_data = matrix.fft_settings.fft(&extended_poly.coeffs, false);
     order_by_rev_bit_order(&mut extended_data);
 
     // Assert
@@ -590,7 +590,7 @@ fn fk20_multi_proof_full_circle_fixed_value() {
     let proofs = matrix.dau_using_fk20_multi(&polynomial);
     let extended_poly = polynomial.get_extended(n2);
     let commitment = polynomial.commit(&matrix.curve.g1_points);
-    let mut extended_data = matrix.fft(&extended_poly.coeffs, false);
+    let mut extended_data = matrix.fft_settings.fft(&extended_poly.coeffs, false);
     order_by_rev_bit_order(&mut extended_data);
     
     // Act
@@ -638,7 +638,7 @@ fn fk20_multi_proof_full_circle_random_secret() {
     let proofs = matrix.dau_using_fk20_multi(&polynomial);
     let extended_poly = polynomial.get_extended(n2);
     let commitment = polynomial.commit(&matrix.curve.g1_points);
-    let mut extended_data = matrix.fft(&extended_poly.coeffs, false);
+    let mut extended_data = matrix.fft_settings.fft(&extended_poly.coeffs, false);
     order_by_rev_bit_order(&mut extended_data);
     
     // Act
