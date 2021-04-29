@@ -1496,10 +1496,90 @@ impl FFTSettings {
             let mut zero_poly = vec![Fr::default(); length];
             self.make_zero_poly_mul_leaf(&mut zero_poly, indices, stride);
 
-            zero_poly = self.fft(&zero_poly, false);
+            let zero_eval = self.fft(&zero_poly, false);
+            return (zero_eval, zero_poly);
         }
 
-        return (vec![], vec![]);
+        let leaf_count = (indices.len() + per_leaf - 1) / per_leaf;
+        let n = next_pow_of_2(leaf_count * per_leaf_poly);
+
+        // TODO: rust limitations or my knowledge gap, look for a way to optimize this, maybe share an unsafe context
+        let mut out = vec![Fr::default(); n];
+        let mut offset = 0;
+        let mut leaves: Vec<Vec<Fr>> = vec![vec![]; leaf_count];
+        let max = indices.len();
+        for _ in 0..leaf_count {
+            let end = min(offset + per_leaf, max);
+            let mut slice = vec![Fr::default(); per_leaf_poly];
+            self.make_zero_poly_mul_leaf(&mut slice, &indices[offset..end], stride);
+            let mut slice_copy = slice.clone();
+            out.append(&mut slice_copy);
+            leaves.push(slice);
+            offset += per_leaf;
+        }
+
+        let reduction_factor = 4;
+        let mut scratch = vec![Fr::default(); n * 3];
+
+        while leaves.len() > 1 {
+            let reduced_count = (leaves.len() + reduction_factor - 1) / reduction_factor;
+            let leaf_size = next_pow_of_2(leaves[0].len());
+            for i in 0..reduced_count {
+                let start = i * reduction_factor;
+                let mut end = start + reduction_factor;
+
+                let out_end = min(out.len(), end * leaf_size);
+                let reduced = &mut out[start * leaf_size .. out_end].to_vec();
+                end = min(end, leaves.len()); 
+
+                let leaves_slice = &mut leaves[start..end];
+                if end > start + 1 {
+                    *reduced = self.reduce_leaves(&mut scratch, leaves_slice, reduced.len());
+                }
+                leaves[i] = reduced.to_vec();
+            }
+            leaves = leaves[..reduced_count].to_vec();
+        }
+        let zero_poly = Polynomial::extend(&leaves[0], length);
+        let zero_eval = self.fft(&zero_poly, false);
+
+        return (zero_eval, zero_poly);
+    }
+
+    pub fn reduce_leaves(&self, scratch: &mut [Fr], ps: &[Vec<Fr>], n: usize) -> Vec<Fr> {
+        let out_degree: usize = ps.iter().map(|x| x.len()).sum();        
+        // let p_padded = &scratch[..n];
+        // let mul_eval_ps = &scratch[n..2*n];
+        // let p_eval = &scratch[2*n..3*n];
+        
+        let mul_eval_ps = self.inplace_fft(&scratch[..n].to_vec(), false);
+        for i in 0..n {
+            scratch[n + i] = mul_eval_ps[i].clone();
+        }
+
+        //padPoly
+        let last_item = ps.last().unwrap();
+        for (i, fr) in last_item.iter().enumerate() {
+            scratch[i] = fr.clone();
+        }
+
+        let last = ps.len() - 1;
+        for i in 0..last {
+            let p = &ps[i];
+            for j in 0..p.len() {
+                scratch[j] = p[j].clone();
+            }
+            let p_eval = self.inplace_fft(&scratch[..n].to_vec(), false);
+            for j in 0..n {
+                scratch[(2*n) + j] = p_eval[j].clone();
+            }
+            for j in 0..n {
+                let tmp = &scratch[n + j] * &p_eval[j];
+                scratch[n + j] = tmp;
+            }
+        }
+        let out = self.inplace_fft(&scratch[n..2*n].to_vec(), false);
+        return out[..out_degree + 1].to_vec(); 
     }
     
     pub fn make_zero_poly_mul_leaf(&self, dest: &mut Vec<Fr>, indices: &[usize], stride: usize) {
