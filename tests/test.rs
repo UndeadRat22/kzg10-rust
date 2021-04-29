@@ -1,5 +1,5 @@
 use mcl_rust::*;
-use std::mem;
+use std::{mem};
 
 macro_rules! field_test {
     ($t:ty) => {{
@@ -670,8 +670,40 @@ fn fk20_multi_proof_full_circle_random_secret() {
     }
 }
 
+// DAS
+#[test]
+fn das_ftt_extension_should_extend_with_exact_values_given_known_inputs() {
+    // Arrange
+    assert!(init(CurveType::BLS12_381));
+
+    let settings = FFTSettings::new(4);
+    let half = settings.max_width >> 1;
+    let mut nums: Vec<Fr> = (0..half).map(|x| Fr::from_int(x as i32)).collect();
+
+    // Act
+    settings.das_fft_extension(&mut nums);
+
+    // Assert
+    let expected = [
+		"40848550508281085032507004530576241411780082424652766156356301038276798860159",
+		"6142039928270026418094108197259568351390689035055085818561263188953927618475",
+		"11587324666845105443475591151536072107134200545187128887977105192896420361353",
+		"22364018979440222199939016627179319600179064631238957550218800890988804372329",
+		"11587324666845105443475591151536072107134200545187128887977105192896420361353",
+		"6142039928270026418094108197259568351390689035055085818561263188953927618475",
+		"40848550508281085032507004530576241411780082424652766156356301038276798860159",
+		"17787776339145915450250797138634814172282648860553994191802836368572645501264",
+    ];
+
+    assert_eq!(expected.len(), nums.len());
+    let all_values_equal = expected.iter().zip(expected.iter()).all(|(a, b)| a == b);
+    assert!(all_values_equal);
+}
+
+
 // Helpers
 // Based on poly seen in TestKZGSettings_DAUsingFK20Multi
+// A poly that helps test edge cases of some Fr values, helps with informal correctness verification
 fn build_protolambda_poly(chunk_count: usize, chunk_len: usize, n: usize) -> Polynomial {
     let mut poly_vals = vec![Fr::default(); n];
     let v134 = Fr::from_int(134);
