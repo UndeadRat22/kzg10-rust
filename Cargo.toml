@@ -16,6 +16,10 @@ name = "bench_proof_check"
 harness = false
 
 [[bench]]
+name = "bench_das"
+harness = false
+
+[[bench]]
 name = "bench_proof_gen"
 harness = false
 
