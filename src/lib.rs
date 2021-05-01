@@ -1,4 +1,4 @@
-use std::{cmp::min, iter, mem::{MaybeUninit}, ops, usize};
+use std::{cmp::min, iter, mem::{MaybeUninit}, ops, usize, vec};
 use std::ops::{Add, AddAssign};
 use std::ops::{Div, DivAssign};
 use std::ops::{Mul, MulAssign};
@@ -1044,7 +1044,7 @@ impl FFTSettings {
         }
     }
 
-    fn _fft(&self, values: &Vec<Fr>, offset: usize, stride: usize, roots_of_unity: &Vec<Fr>, root_stride: usize, out: &mut [Fr]) {
+    fn _fft(&self, values: &[Fr], offset: usize, stride: usize, roots_of_unity: &Vec<Fr>, root_stride: usize, out: &mut [Fr]) {
         // check if correct value is checked in case of a bug!
         if out.len() <= 4 { // if the value count is small, run the unoptimized version instead. // TODO tune threshold.
             return self._simple_ftt(values, offset, stride, roots_of_unity, root_stride, out);
@@ -1068,7 +1068,7 @@ impl FFTSettings {
         }
     }
 
-    fn _simple_ftt(&self, values: &Vec<Fr>, offset: usize, stride: usize, roots_of_unity: &Vec<Fr>, root_stride: usize, out: &mut [Fr]) {
+    fn _simple_ftt(&self, values: &[Fr], offset: usize, stride: usize, roots_of_unity: &Vec<Fr>, root_stride: usize, out: &mut [Fr]) {
         let out_len = out.len();
         let init_last = &values[offset] * &roots_of_unity[0];
 
@@ -1084,7 +1084,7 @@ impl FFTSettings {
         }
     }
 
-    pub fn inplace_fft(&self, values: &Vec<Fr>, inv: bool) -> Vec<Fr> {
+    pub fn inplace_fft(&self, values: &[Fr], inv: bool) -> Vec<Fr> {
         
         if inv {
             let root_z: Vec<Fr> = self.exp_roots_of_unity_rev.iter().map(|x| x.clone()).take(self.max_width).collect();
@@ -1547,59 +1547,63 @@ impl FFTSettings {
     }
 
     pub fn reduce_leaves(&self, scratch: &mut [Fr], ps: &[Vec<Fr>], n: usize) -> Vec<Fr> {
-        let out_degree: usize = ps.iter().map(|x| x.len()).sum();        
-        // let p_padded = &scratch[..n];
-        // let mul_eval_ps = &scratch[n..2*n];
-        // let p_eval = &scratch[2*n..3*n];
-        
-        let mul_eval_ps = self.inplace_fft(&scratch[..n].to_vec(), false);
+        let out_degree: usize = ps.iter().map(|x| x.len() - 1).sum();
+        let (p_padded, rest) = scratch.split_at_mut(n);
+        let (mul_eval_ps, p_eval) = rest.split_at_mut(n);
+
+        for i in 0..p_padded.len() {
+            p_padded[i] = Fr::zero();
+        }
+        for (i, v) in ps.last().unwrap().iter().enumerate() {
+            p_padded[i] = v.clone();
+        }
+
+        //can optimize this, one alloc instead of three
+        let temp = self.inplace_fft(&p_padded, false);
         for i in 0..n {
-            scratch[n + i] = mul_eval_ps[i].clone();
+            mul_eval_ps[i] = temp[i].clone();
         }
 
-        //padPoly
-        let last_item = ps.last().unwrap();
-        for (i, fr) in last_item.iter().enumerate() {
-            scratch[i] = fr.clone();
-        }
-
-        let last = ps.len() - 1;
-        for i in 0..last {
+        let last_index = ps.len() - 1;
+        for i in 0..last_index {
             let p = &ps[i];
             for j in 0..p.len() {
-                scratch[j] = p[j].clone();
+                p_padded[j] = p[j].clone();
             }
-            let p_eval = self.inplace_fft(&scratch[..n].to_vec(), false);
+            // p_eval = inplace_fft(p_padded);
+            let p_eval_result = self.inplace_fft(&p_padded, false);
             for j in 0..n {
-                scratch[(2*n) + j] = p_eval[j].clone();
+                p_eval[j] = p_eval_result[j].clone();
             }
+
             for j in 0..n {
-                let tmp = &scratch[n + j] * &p_eval[j];
-                scratch[n + j] = tmp;
+                mul_eval_ps[j] *= &p_eval[j];
             }
         }
-        let out = self.inplace_fft(&scratch[n..2*n].to_vec(), false);
-        return out[..out_degree + 1].to_vec(); 
+
+        let result = self.inplace_fft(&mul_eval_ps, true);
+        return result[..out_degree + 1].to_vec();
     }
     
     pub fn make_zero_poly_mul_leaf(&self, dest: &mut Vec<Fr>, indices: &[usize], stride: usize) {
         if (indices.len() + 1) > dest.len() {
             panic!("expected bigger dest length");
-        }   
+        }
+        // is this neccessary?
+        for i in (indices.len() + 1)..dest.len() {
+            dest[i] = Fr::zero();
+        }
+
         dest[indices.len()] = Fr::one();
         
         for (i, v) in indices.iter().enumerate() {
-            let neg_di = (&self.exp_roots_of_unity[v * stride]).get_neg(); //TODO: could be a bug check if neg is the same as 0-n;
+            let neg_di = self.exp_roots_of_unity[v * stride].get_neg();
             dest[i] = neg_di.clone();
-            //TODO: opt, remove if
             if i > 0 {
                 let temp = &dest[i] + &dest[i - 1];
                 dest[i] = temp;
-
-                for j in (i - 1)..0 {
-                    let temp = &dest[j] + &neg_di;
-                    dest[j] = temp;
-
+                for j in (1..i).rev() {
+                    dest[j] *= &neg_di;
                     let temp = &dest[j] + &dest[j - 1];
                     dest[j] = temp;
                 }

@@ -1,5 +1,5 @@
 use mcl_rust::*;
-use std::{mem};
+use std::{mem, vec};
 
 macro_rules! field_test {
     ($t:ty) => {{
@@ -700,6 +700,68 @@ fn das_ftt_extension_should_extend_with_exact_values_given_known_inputs() {
     assert!(all_values_equal);
 }
 
+// Zero Poly
+#[test]
+fn fft_settings_make_zero_poly_mul_leaf_should_return_exact_result_given_known_input() {
+    // Arrange
+    let settings = FFTSettings::new(4);
+    let mut from_direct = vec![Fr::default(); 9];
+    let indices = vec![1, 3, 7, 8, 9, 10, 12, 13];
+
+    //Act
+    settings.make_zero_poly_mul_leaf(&mut from_direct, &indices, 1);
+    
+    // Assert
+    let expected = vec![
+        "38476778329304481878022718993882556548812578500290864179952442003245540347252",
+        "50186564627255281608660935680706646713107687550024192139838955039448154181749",
+        "39243132587368996089464151276551835679802393705778511611365663565350753197990",
+        "8886525670832950037403820227457774501115357138963728191033023737126263554734",
+        "39423785451480055448398145195082124374056011700214448253256356858091859173057",
+        "33404207154315723314001517707036921761049961639017818728334249043678763064723",
+        "1030314501662711068645766330849776133761481944176186168487690159932860759232",
+        "25696713417412289524464508181164949761159459522454271153855924766367832676326",
+        "1"
+        ];
+        
+    assert_eq!(expected.len(), from_direct.len());
+    for i in 0..from_direct.len() {
+        assert_eq!(expected[i], from_direct[i].get_str(10));
+    }
+}
+
+#[test]
+fn fft_settings_reduce_leaves_should_return_exact_result_given_known_input() {
+    // Arrange
+    let settings = FFTSettings::new(4);
+    let mut leaves = vec![vec![Fr::default(); 3]; 4];
+    let leaf_indices = vec![vec![1, 3], vec![7, 8], vec![9, 10], vec![12, 13]];
+    for i in 0..4 {
+        settings.make_zero_poly_mul_leaf(&mut leaves[i], &leaf_indices[i], 1);
+    }
+    let mut scratch = vec![Fr::default(); 16 * 3];
+    // Act
+    let result = settings.reduce_leaves(&mut scratch, &leaves, 16);
+    let from_tree_reduction = &result[..9];
+    // Assert
+    
+    let expected = vec![
+        "38476778329304481878022718993882556548812578500290864179952442003245540347252",
+        "50186564627255281608660935680706646713107687550024192139838955039448154181749",
+        "39243132587368996089464151276551835679802393705778511611365663565350753197990",
+        "8886525670832950037403820227457774501115357138963728191033023737126263554734",
+        "39423785451480055448398145195082124374056011700214448253256356858091859173057",
+        "33404207154315723314001517707036921761049961639017818728334249043678763064723",
+        "1030314501662711068645766330849776133761481944176186168487690159932860759232",
+        "25696713417412289524464508181164949761159459522454271153855924766367832676326",
+        "1"
+        ];
+        
+    assert_eq!(expected.len(), from_tree_reduction.len());
+    for i in 0..from_tree_reduction.len() {
+        assert_eq!(expected[i], from_tree_reduction[i].get_str(10));
+    }
+}
 
 // Helpers
 // Based on poly seen in TestKZGSettings_DAUsingFK20Multi
