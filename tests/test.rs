@@ -763,6 +763,97 @@ fn fft_settings_reduce_leaves_should_return_exact_result_given_known_input() {
     }
 }
 
+#[test]
+fn fft_settings_zero_poly_via_multi_should_return_exact_values_for_eval_given_known_inputs() {
+    // Arrange
+    let settings = FFTSettings::new(4);
+    let exists = vec![
+        true, false, false, true,
+        false, true, true, false,
+        false, false, true, true,
+        false, true, false, true
+    ];
+    let indices: Vec<usize> = exists.iter()
+        .enumerate()
+        .filter(|(_, ex)| !(*ex))
+        .map(|(ix, _)| ix)
+        .collect();
+    
+    // Act
+    let (zero_eval, _) = settings.zero_poly_via_multiplication(&indices, exists.len());
+    
+    // Assert
+    let expected_eval = vec![
+        "14588039771402811141309184187446855981335438080893546259057924963590957391610",
+		"0",
+		"0",
+		"25282314916481609559521954076339682473205592322878335865825728051159013479404",
+		"0",
+		"9734294374130760583715448090686447252507379360428151468094660312309164340954",
+		"46174059940592560972885266237294437331033682990367334129313899533918398326759",
+		"0",
+		"0",
+		"0",
+		"19800438175532257114364592658377771559959372488282871075375645402573059163542",
+		"51600792158839053735333095261675086809225297622863271039022341472045686698468",
+		"0",
+		"30826826002656394595578928901119179510733149506206612508564887111870905005459",
+		"0",
+		"15554185610546001233857357261484634664347627247695018404843511652636226542123",
+    ];
+
+    assert_eq!(expected_eval.len(), zero_eval.len());
+    for i in 0..expected_eval.len() {
+        assert_eq!(expected_eval[i], zero_eval[i].get_str(10));
+    }
+}
+
+
+#[test]
+fn fft_settings_zero_poly_via_multi_should_return_exact_values_for_poly_given_known_inputs() {
+    // Arrange
+    let settings = FFTSettings::new(4);
+    let exists = vec![
+        true, false, false, true,
+        false, true, true, false,
+        false, false, true, true,
+        false, true, false, true
+    ];
+    let indices: Vec<usize> = exists.iter()
+        .enumerate()
+        .filter(|(_, ex)| !(*ex))
+        .map(|(ix, _)| ix)
+        .collect();
+    
+    // Act
+    let (_, zero_poly) = settings.zero_poly_via_multiplication(&indices, exists.len());
+    
+    // Assert
+    let expected_poly = vec![
+		"16624801632831727463500847948913128838752380757508923660793891075002624508302",
+		"657600938076390596890050185197950209451778703253960215879283709261059409858",
+		"3323305725086409462431021445881322078102454991213853012292210556336005043908",
+		"28834633028751086963335689622252225417970192887686504864119125368464893106943",
+		"13240145897582070561550318352041568075426755012978281815272419515864405431856",
+		"29207346592337407428161116115756746704727357067233245260187026881605970530301",
+		"26541641805327388562620144855073374836076680779273352463774100034531024896251",
+		"1030314501662711061715476678702471496208942882800700611947185222402136833216",
+		"1",
+		"0",
+		"0",
+		"0",
+		"0",
+		"0",
+		"0",
+		"0"
+    ];
+
+    assert_eq!(expected_poly.len(), zero_poly.len());
+    for i in 0..zero_poly.len() {
+        assert_eq!(expected_poly[i], zero_poly[i].get_str(10));
+    }
+}
+
 // Helpers
 // Based on poly seen in TestKZGSettings_DAUsingFK20Multi
 // A poly that helps test edge cases of some Fr values, helps with informal correctness verification
