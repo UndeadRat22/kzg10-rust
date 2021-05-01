@@ -854,6 +854,38 @@ fn fft_settings_zero_poly_via_multi_should_return_exact_values_for_poly_given_kn
     }
 }
 
+#[test]
+fn polynomial_recover_from_samples_should_recover_all_values_given_less_than_half_of_data_is_missing() {
+    // Arrange
+    let settings = FFTSettings::new(10);
+
+    let coeffs: Vec<i32> = (0..((settings.max_width >> 1) as i32)).collect();
+    let poly = Polynomial::from_i32(&coeffs);
+    // extend for redundancy
+    let extended = poly.get_extended(settings.max_width);
+    let data = settings.fft(&extended.coeffs, false);
+
+    // remove 1/4th of data
+    let data_with_missing: Vec<Option<Fr>> = data
+        .iter()
+        .enumerate()
+        .map(|(ix, entry)| {
+            if ix % 4 == 0 {
+                return None::<Fr>;
+            }
+            return Some(entry.clone());
+        }).collect();
+
+    // Act
+    let recovered = Polynomial::recover_from_samples(settings, &data_with_missing);
+
+    // Assert
+    assert_eq!(data.len(), recovered.order());
+    for i in 0..data.len() {
+        assert_eq!(data[i].get_str(10), recovered.coeffs[i].get_str(10));
+    }
+}
+
 // Helpers
 // Based on poly seen in TestKZGSettings_DAUsingFK20Multi
 // A poly that helps test edge cases of some Fr values, helps with informal correctness verification
