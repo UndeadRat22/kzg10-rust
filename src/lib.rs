@@ -1552,7 +1552,7 @@ impl FFTSettings {
         let leaf_count = (indices.len() + per_leaf - 1) / per_leaf;
         let n = next_pow_of_2(leaf_count * per_leaf_poly);
 
-        // TODO: rust limitations or my knowledge gap, look for a way to optimize this, maybe share an unsafe context
+        // TODO: rust limitation, can't have multiple mutators for same value, code fails somewhere here, as I tried to achieve same func through duplicated value management.
         let mut out = vec![Fr::default(); n];
         let mut offset = 0;
         let mut leaves: Vec<Vec<Fr>> = vec![vec![]; leaf_count];
