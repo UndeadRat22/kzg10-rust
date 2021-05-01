@@ -1,5 +1,6 @@
 use mcl_rust::*;
 use std::{mem, vec};
+use rand::prelude::*;
 
 macro_rules! field_test {
     ($t:ty) => {{
@@ -704,6 +705,7 @@ fn das_ftt_extension_should_extend_with_exact_values_given_known_inputs() {
 #[test]
 fn fft_settings_make_zero_poly_mul_leaf_should_return_exact_result_given_known_input() {
     // Arrange
+    assert!(init(CurveType::BLS12_381));
     let settings = FFTSettings::new(4);
     let mut from_direct = vec![Fr::default(); 9];
     let indices = vec![1, 3, 7, 8, 9, 10, 12, 13];
@@ -733,6 +735,7 @@ fn fft_settings_make_zero_poly_mul_leaf_should_return_exact_result_given_known_i
 #[test]
 fn fft_settings_reduce_leaves_should_return_exact_result_given_known_input() {
     // Arrange
+    assert!(init(CurveType::BLS12_381));
     let settings = FFTSettings::new(4);
     let mut leaves = vec![vec![Fr::default(); 3]; 4];
     let leaf_indices = vec![vec![1, 3], vec![7, 8], vec![9, 10], vec![12, 13]];
@@ -764,8 +767,38 @@ fn fft_settings_reduce_leaves_should_return_exact_result_given_known_input() {
 }
 
 #[test]
+fn fft_settings_zero_poly_scaled_test() {
+    let scale = 8;
+
+    // Arrange
+    let fs = FFTSettings::new(scale);
+    let exists: Vec<bool> = (0..fs.max_width)
+        .map(|_| rand::random())
+        .collect();
+
+    let indices: Vec<usize> = exists.iter()
+        .enumerate()
+        .filter(|(_, ex)| !(*ex))
+        .map(|(ix, _)| ix)
+        .collect();
+    
+    // Act
+    let (_, zero_poly_coeff) = fs.zero_poly_via_multiplication(&indices, indices.len());
+    let zero_poly = Polynomial::from_fr(zero_poly_coeff);
+
+    // Assert
+    for (i, v) in exists.iter().enumerate() {
+        if !v {
+            let out = zero_poly.eval_at(&fs.exp_roots_of_unity[i]);
+            assert_eq!("0", out.get_str(10));
+        }
+    }
+}
+
+#[test]
 fn fft_settings_zero_poly_via_multi_should_return_exact_values_for_eval_given_known_inputs() {
     // Arrange
+    assert!(init(CurveType::BLS12_381));
     let settings = FFTSettings::new(4);
     let exists = vec![
         true, false, false, true,
@@ -812,6 +845,7 @@ fn fft_settings_zero_poly_via_multi_should_return_exact_values_for_eval_given_kn
 #[test]
 fn fft_settings_zero_poly_via_multi_should_return_exact_values_for_poly_given_known_inputs() {
     // Arrange
+    assert!(init(CurveType::BLS12_381));
     let settings = FFTSettings::new(4);
     let exists = vec![
         true, false, false, true,
@@ -857,6 +891,7 @@ fn fft_settings_zero_poly_via_multi_should_return_exact_values_for_poly_given_kn
 #[test]
 fn polynomial_recover_from_samples_should_recover_all_values_given_less_than_half_of_data_is_missing() {
     // Arrange
+    assert!(init(CurveType::BLS12_381));
     let settings = FFTSettings::new(10);
 
     let coeffs: Vec<i32> = (0..((settings.max_width >> 1) as i32)).collect();
@@ -890,6 +925,7 @@ fn polynomial_recover_from_samples_should_recover_all_values_given_less_than_hal
 // Based on poly seen in TestKZGSettings_DAUsingFK20Multi
 // A poly that helps test edge cases of some Fr values, helps with informal correctness verification
 fn build_protolambda_poly(chunk_count: usize, chunk_len: usize, n: usize) -> Polynomial {
+    assert!(init(CurveType::BLS12_381));
     let mut poly_vals = vec![Fr::default(); n];
     let v134 = Fr::from_int(134);
     for i in 0..chunk_count {
