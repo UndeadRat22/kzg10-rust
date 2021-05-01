@@ -451,19 +451,36 @@ fn extend_poly_appends_fr_zero() {
 #[test]
 fn get_next_power_of_two_returns_correct_values() {
     // Arrange
-    let x1 = 15;
-    let x2 = 16;
-    let x3 = 6;
+    let xs: Vec<usize> = vec![
+        2,
+        4,
+        5,
+        15, 
+        16, 
+        32,
+        64,
+        63,
+        122,
+        250,
+        510,
+        1023
+    ];
     
     // Act
-    let x1_next_pow = next_pow_of_2(x1);
-    let x2_next_pow = next_pow_of_2(x2);
-    let x3_next_pow = next_pow_of_2(x3);
+    let x_next_pows: Vec<usize> = xs.iter().map(|x| next_pow_of_2(x.clone())).collect();
     
     // Assert
-    assert_eq!(16, x1_next_pow);
-    assert_eq!(16, x2_next_pow);
-    assert_eq!(8, x3_next_pow);
+    let expected = [
+        2, 4, 8, 16, 16, 32, 64, 64, 128, 256, 512, 1024
+    ];
+
+    fn assert_eq_ints(a: i32, b: i32){
+        assert_eq!(a, b);
+    }
+
+    expected.iter().zip(x_next_pows)
+        .for_each(|(a, b)| assert_eq_ints(a.clone(), b as i32));
+
 }
 
 #[test]
