@@ -13,6 +13,10 @@ criterion = "0.3"
 rand = "0.5"
 
 [[bench]]
+name = "bench_fft"
+harness = false
+
+[[bench]]
 name = "bench_proof_check"
 harness = false
 

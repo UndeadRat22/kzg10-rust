@@ -1121,6 +1121,65 @@ impl FFTSettings {
 
         return self.inplace_fft(&values_copy, inv);
     }
+
+    pub fn fft_g1(&self, values: &Vec<G1>) -> Vec<G1> {
+        // TODO: check if copy can be removed, opt?
+        let vals_copy = values.clone();
+        
+        let root_z: Vec<Fr> = self.exp_roots_of_unity.iter()
+            .take(self.max_width)
+            .map(|x| x.clone())
+            .collect();
+
+        let stride = self.max_width /  values.len();
+        let mut out = vec![G1::zero(); values.len()];
+
+        FFTSettings::_fft_g1(&self, &vals_copy, 0, 1, &root_z, stride, &mut out);
+
+        return out;
+    }
+
+    fn _fft_g1(fft_settings: &FFTSettings, values: &Vec<G1>, value_offset: usize, value_stride: usize, roots_of_unity: &Vec<Fr>, roots_stride: usize, out: &mut [G1]) {
+        //TODO: fine tune for opt, maybe resolve number dinamically based on experiments
+        if out.len() <= 4 {
+            return FFTSettings::_fft_g1_simple(values, value_offset, value_stride, roots_of_unity, roots_stride, out);
+        }
+
+        let half = out.len() >> 1;
+
+        // left
+        FFTSettings::_fft_g1(fft_settings, values, value_offset, value_stride << 1, roots_of_unity, roots_stride << 1, &mut out[..half]);
+        // right
+        FFTSettings::_fft_g1(fft_settings, values, value_offset + value_stride, value_stride << 1, roots_of_unity, roots_stride << 1, &mut out[half..]);
+
+        for i in 0..half {
+            let x = out[i].clone();
+            let y = out[i + half].clone();
+            let root = &roots_of_unity[i * roots_stride];
+
+            let y_times_root = &y * &root;
+            out[i] = &x + &y_times_root;
+            out[i + half] = &x - &y_times_root;
+        }
+
+        return;
+    }
+    
+
+    fn _fft_g1_simple(values: &Vec<G1>, value_offset: usize, value_stride: usize, roots_of_unity: &Vec<Fr>, roots_stride: usize, out: &mut [G1]) {
+        let l = out.len();
+        for i in 0..l {
+            // TODO: check this logic with a working brain, there could be a simpler way to write this;
+            let mut v = &values[value_offset] * &roots_of_unity[0];
+            let mut last = v.clone();
+            for j in 1..l {
+                v = &values[value_offset + j * value_stride] * &roots_of_unity[((i * j) % l) * roots_stride];
+                let temp = last.clone();
+                last = &temp + &v;
+            }
+            out[i] = last;
+        }
+    }
 }
 
 // KZG Settings + FK20 Settings + FFTSettings?
@@ -1208,7 +1267,7 @@ impl FK20Matrix {
         return out;
     }
 
-
+ 
     pub fn fft_g1_inv(&self, values: &Vec<G1>) -> Vec<G1> {
         // TODO: check if copy can be removed, opt?
         let vals_copy = values.clone();
